@@ -20,7 +20,7 @@ apt -yqq install \
 				libgit2-dev \
 				libjpeg-dev \
 				virtualenv \
-				python-pip \
+				python-pip3 \
 				python-jinja2 \
 				python-gdbm \
 				redis-server &>/dev/null
@@ -68,7 +68,6 @@ PDB_PASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
 PAG_HOME="/opt/$PAG_USER"
 PAG_HOME_EXT="$PAG_HOME/$PAG_USER-server"
 PAG_CFG_FILE="$PAG_HOME/pagure.cfg"
-
 #--------------------------------------------------
 # Create Postgresql user
 #--------------------------------------------------
@@ -86,7 +85,7 @@ service postgresql restart
 #--------------------------------------------------
 echo -e "\n---- Create Pagure system user ----"
 adduser --system --quiet --shell=/bin/bash --home=$PAG_HOME --gecos 'Pagure' --group $PAG_USER
-
+usermod -a -G www-data $PAG_USER
 echo -e "\n---- Create Log directory ----"
 mkdir $PAG_HOME/log/
 chown $PAG_USER:$PAG_USER $PAG_HOME/log/
@@ -94,21 +93,26 @@ chown $PAG_USER:$PAG_USER $PAG_HOME/log/
 #Retrieve the sources
 cd $PAG_HOME
 sudo su $PAG_USER -c "git clone --depth 1 https://github.com/Pagure/pagure $PAG_HOME_EXT/"
-
-
+#Apache copy
+mkdir -p /var/www/releases_$sufix
+chown -R $PAG_USER:$PAG_USER /var/www/releases_$sufix
 echo -e "\n---- Install tool packages ----"
 cd $PAG_HOME_EXT
-sudo su $PAG_USER -c "virtualenv -p python2 ./venv"
+sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip install --upgrade pip"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip install pygit2==0.24 psycopg2"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip install -r $PAG_HOME_EXT/requirements.txt"
-
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip3"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install pygit2==0.24 psycopg2"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
 sudo su $PAG_USER -c "mkdir $PAG_HOME_EXT/{repos,docs,forks,tickets,requests}"
-
+sudo su $PAG_USER -c "mkdir $PAG_HOME/remotes"
+sudo su $PAG_USER -c "mkdir $PAG_HOME/.gitolite/{conf,keydir,logs}"
+#Add empty gitolite
+sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
 #Setup config file
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/gitolite3.rc $PAG_HOME/.gitolite.rc"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.cfg.sample $PAG_CFG_FILE"
+
 SKEY=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 SMAIL=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 sed -i "s|.*SECRET_KEY.*|SECRET_KEY=\'$SKEY\'|" $PAG_CFG_FILE
@@ -199,17 +203,17 @@ check_empty_sed "GIT_URL_SSH" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
 check_empty_sed "GIT_URL_GIT" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
 
 #REDIS
-#Check for it, else install, if already installed create a new instance.
+#Using mured.sh - https://github.com/switnet-ltd/mured
 export RED_SUFIX=$sufix
 bash <(curl -s https://raw.githubusercontent.com/switnet-ltd/mured/master/mured.sh)
-#find port from sufix
-REDIS_PORT=$(grep -n "port" $(find /etc/redis/redis*.conf) | grep -v "[0-9]:#" | grep _$sufix | cut -d ":" -f3 | sort -r | cut -d " " -f2 | head -n 1)
+#Find port from sufix
+REDIS_PORT=$(grep -n "port" $(find /etc/redis/redis*.conf) | grep -v "[0-9]:#" | grep _$sufix | awk 'NF>1{print $NF}')
 sed -i "s|.*REDIS_PORT.*|REDIS_PORT = $REDIS_PORT|" $PAG_CFG_FILE
 usermod -aG redis $PAG_USER
 
 #Set conf env
 export PAGURE_CONFIG=$PAG_CFG_FILE
 #Create the inital database scheme
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME_EXT/files/alembic.ini"
 #ToDo: Replaced by a startup script
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/runserver.py --host=0.0.0.0 -p 5000"

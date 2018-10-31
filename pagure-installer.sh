@@ -20,9 +20,9 @@ apt -yqq install \
 				libgit2-dev \
 				libjpeg-dev \
 				virtualenv \
-				python-pip3 \
-				python-jinja2 \
-				python-gdbm \
+				python3-pip \
+				python3-jinja2 \
+				python3-gdbm \
 				redis-server &>/dev/null
 
 #--------------------------------------------------
@@ -100,7 +100,7 @@ echo -e "\n---- Install tool packages ----"
 cd $PAG_HOME_EXT
 sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip3"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install pygit2==0.24 psycopg2"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
@@ -214,6 +214,7 @@ usermod -aG redis $PAG_USER
 #Set conf env
 export PAGURE_CONFIG=$PAG_CFG_FILE
 #Create the inital database scheme
+sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic.ini|" $PAG_HOME_EXT/files/alembic.ini
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME_EXT/files/alembic.ini"
 #ToDo: Replaced by a startup script
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/runserver.py --host=0.0.0.0 -p 5000"

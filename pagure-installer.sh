@@ -8,7 +8,9 @@ if ! [ $(id -u) = 0 ]; then
    echo "You need to be root or have sudo privileges!"
    exit 1
 fi
-
+echo "#--------------------------------------------------
+# Installing system dependancies
+#--------------------------------------------------"
 apt -qq update && \
 apt -yqq install \
 				apt-utils \
@@ -117,7 +119,7 @@ sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requi
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
 sudo su $PAG_USER -c "mkdir $PAG_HOME_EXT/{repos,docs,forks,tickets,requests}"
 sudo su $PAG_USER -c "mkdir $PAG_HOME/remotes"
-sudo su $PAG_USER -c "mkdir $PAG_HOME/.gitolite/{conf,keydir,logs}"
+sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 #Add empty gitolite
 sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
 #Setup config files
@@ -138,74 +140,100 @@ sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|pas
 sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|host|localhost|" $PAG_CFG_FILE
 sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|db_name|$PAG_PDB|" $PAG_CFG_FILE
 
-#EMAIL SETUP
-EMAIL_SYS_ERR=""
-SMTP_SRV=""
-SMTP_PORT=""
-SMTP_SSL=""
-SMTP_USR=""
-SMTP_PSWD=""
-NOTFY_EMAIL=""
-NOTFY_DOMAIN=""
-# Store data to $SETUP_EMAIL variable
-SETUP_EMAIL=$(\
-dialog --ok-label "Submit" \
-		--backtitle "Pagure Mail Setup" \
-		--title "Pagure - Mail Options" \
-		--form "Set system values for email" \
-60 90 0 \
-		"Email to receive traceback errors:"	1 1	"$EMAIL_SYS_ERR" 	1 40 40 0 \
-		"Email used to send notifications:"		2 1	"$NOTFY_EMAIL" 		2 40 40 0 \
-		"Domain email notification:"			3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
-		"SMTP Server:"  						4 1	"$SMTP_SRV"  		4 40 40 0 \
-		"SMTP Port (465):"	   					5 1	"$SMTP_PORT"  		5 40 40 0 \
-		"SMTP SSL (True|False):"				6 1	"$SMTP_SSL" 		6 40 40 0 \
-		"SMTP Username:"						7 1	"$SMTP_USR" 		7 40 40 0 \
-		"SMTP Password:"						8 1	"$SMTP_PSWD" 		8 40 40 0 \
-  3>&1 1>&2 2>&3 3>&- \
-)
-# Extract variables
-EMAIL_SYS_ERR=$(echo "$SETUP_EMAIL" | sed -n 1p)
-NOTFY_EMAIL=$(echo "$SETUP_EMAIL" | sed -n 2p)
-NOTFY_DOMAIN=$(echo "$SETUP_EMAIL" | sed -n 3p)
-SMTP_SRV=$(echo "$SETUP_EMAIL" | sed -n 4p)
-SMTP_PORT=$(echo "$SETUP_EMAIL" | sed -n 5p)
-SMTP_SSL=$(echo "$SETUP_EMAIL" | sed -n 6p)
-SMTP_USR=$(echo "$SETUP_EMAIL" | sed -n 7p)
-SMTP_PSWD=$(echo "$SETUP_EMAIL" | sed -n 8p)
+#Enable and setup email
+echo -e "\nDo you want to enable and configure email sending? ( yes or no ):"
+while [[ $EMAIL_SET_ANS != yes && $EMAIL_SET_ANS != no ]]
+do
+	read EMAIL_SET_ANS
+if [ $EMAIL_SET_ANS = no ]; then
+	echo "Please if you change your mind, you'll need to configure manually!"
+elif [ $EMAIL_SET_ANS = yes ]; then
+	sed -i "s|.*EMAIL_SEND.*|EMAIL_SEND = True|" $PAG_CFG_FILE
+	echo "Starting email setup"
+		#EMAIL SETUP
+		EMAIL_SYS_ERR=""
+		SMTP_SRV=""
+		SMTP_PORT=""
+		SMTP_SSL=""
+		SMTP_USR=""
+		SMTP_PSWD=""
+		NOTFY_EMAIL=""
+		NOTFY_DOMAIN=""
+		# Store data to $SETUP_EMAIL variable
+		SETUP_EMAIL=$(\
+		dialog --ok-label "Submit" \
+				--backtitle "Pagure Mail Setup" \
+				--title "Pagure - Mail Options" \
+				--form "Set system values for email" \
+		60 90 0 \
+				"Email to receive traceback errors:"	1 1	"$EMAIL_SYS_ERR" 	1 40 40 0 \
+				"Email used to send notifications:"		2 1	"$NOTFY_EMAIL" 		2 40 40 0 \
+				"Domain email notification:"			3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
+				"SMTP Server:"  						4 1	"$SMTP_SRV"  		4 40 40 0 \
+				"SMTP Port (465):"	   					5 1	"$SMTP_PORT"  		5 40 40 0 \
+				"SMTP SSL (True|False):"				6 1	"$SMTP_SSL" 		6 40 40 0 \
+				"SMTP Username:"						7 1	"$SMTP_USR" 		7 40 40 0 \
+				"SMTP Password:"						8 1	"$SMTP_PSWD" 		8 40 40 0 \
+		  3>&1 1>&2 2>&3 3>&- \
+		)
+		# Extract variables
+		EMAIL_SYS_ERR=$(echo "$SETUP_EMAIL" | sed -n 1p)
+		NOTFY_EMAIL=$(echo "$SETUP_EMAIL" | sed -n 2p)
+		NOTFY_DOMAIN=$(echo "$SETUP_EMAIL" | sed -n 3p)
+		SMTP_SRV=$(echo "$SETUP_EMAIL" | sed -n 4p)
+		SMTP_PORT=$(echo "$SETUP_EMAIL" | sed -n 5p)
+		SMTP_SSL=$(echo "$SETUP_EMAIL" | sed -n 6p)
+		SMTP_USR=$(echo "$SETUP_EMAIL" | sed -n 7p)
+		SMTP_PSWD=$(echo "$SETUP_EMAIL" | sed -n 8p)
 
-# Set them in place
-check_empty_sed "EMAIL_ERROR" "$PAG_CFG_FILE" "root@localhost" "$EMAIL_SYS_ERR"
-check_empty_sed "SMTP_SERVER" "$PAG_CFG_FILE" "localhost" "$SMTP_SRV"
-check_empty_sed "SMTP_PORT" "$PAG_CFG_FILE" "25" "$SMTP_PORT"
-check_empty_sed "SMTP_SSL" "$PAG_CFG_FILE" "False" "$SMTP_SSL"
-check_empty_sed "SMTP_USERNAME" "$PAG_CFG_FILE" "None" "\'$SMTP_USR\'"
-check_empty_sed "SMTP_PASSWORD" "$PAG_CFG_FILE" "None" "\'$SMTP_PSWD\'"
-check_empty_sed "FROM_EMAIL" "$PAG_CFG_FILE" "pagure@localhost.localdomain" "$NOTFY_EMAIL"
-check_empty_sed "DOMAIN_EMAIL_NOTIFICATIONS" "$PAG_CFG_FILE" "localhost.localdomain" "$NOTFY_DOMAIN"
+		# Set them in place
+		check_empty_sed "EMAIL_ERROR" "$PAG_CFG_FILE" "root@localhost" "$EMAIL_SYS_ERR"
+		check_empty_sed "SMTP_SERVER" "$PAG_CFG_FILE" "localhost" "$SMTP_SRV"
+		check_empty_sed "SMTP_PORT" "$PAG_CFG_FILE" "25" "$SMTP_PORT"
+		check_empty_sed "SMTP_SSL" "$PAG_CFG_FILE" "False" "$SMTP_SSL"
+		check_empty_sed "SMTP_USERNAME" "$PAG_CFG_FILE" "None" "\'$SMTP_USR\'"
+		check_empty_sed "SMTP_PASSWORD" "$PAG_CFG_FILE" "None" "\'$SMTP_PSWD\'"
+		check_empty_sed "FROM_EMAIL" "$PAG_CFG_FILE" "pagure@localhost.localdomain" "$NOTFY_EMAIL"
+		check_empty_sed "DOMAIN_EMAIL_NOTIFICATIONS" "$PAG_CFG_FILE" "localhost.localdomain" "$NOTFY_DOMAIN"
+else
+echo "There is only a yes | no response."
+fi
+done
 
-#DOMAIN SETUP
-APP_URL=""
-DOC_APP_URL=""
-# Store data to $SETUP_DOMAIN variable
-SETUP_DOMAIN=$(\
-dialog --ok-label "Submit" \
-		--backtitle "Pagure Domain Setup" \
-		--title "Pagure - Domain Options" \
-		--form "Set system values for domain" \
-40 90 0 \
-		"Pagure's domain:"		1 1	"$APP_URL" 	1 40 40 0 \
-		"Pagure's docs domain:" 2 1	"$DOC_APP_URL"  	2 40 40 0 \
-  3>&1 1>&2 2>&3 3>&- \
-)
-# Extract variables
-APP_URL=$(echo "$SETUP_DOMAIN" | sed -n 1p)
-DOC_APP_URL=$(echo "$SETUP_DOMAIN" | sed -n 2p)
-# Set them in place
-check_empty_sed "APP_URL" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
-check_empty_sed "DOC_APP_URL" "$PAG_CFG_FILE" "docs.localhost.localdomain" "$DOC_APP_URL"
-check_empty_sed "GIT_URL_SSH" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
-check_empty_sed "GIT_URL_GIT" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
+echo -e "\nDo you want to enable and domain? ( yes or no ):"
+while [[ $setdomain != yes && $setdomain != no ]]
+do
+	read setdomain
+if [ $setdomain = no ]; then
+	echo "Please if you change your mind, you'll need to configure manually!"
+elif [ $setdomain = yes ]; then
+	echo "Seting domain URL"
+		#DOMAIN SETUP
+		APP_URL=""
+		DOC_APP_URL=""
+		# Store data to $SETUP_DOMAIN variable
+		SETUP_DOMAIN=$(\
+		dialog --ok-label "Submit" \
+				--backtitle "Pagure Domain Setup" \
+				--title "Pagure - Domain Options" \
+				--form "Set system values for domain" \
+		40 90 0 \
+				"Pagure's domain:"		1 1	"$APP_URL" 	1 40 40 0 \
+				"Pagure's docs domain:" 2 1	"$DOC_APP_URL"  	2 40 40 0 \
+		  3>&1 1>&2 2>&3 3>&- \
+		)
+		# Extract variables
+		APP_URL=$(echo "$SETUP_DOMAIN" | sed -n 1p)
+		DOC_APP_URL=$(echo "$SETUP_DOMAIN" | sed -n 2p)
+		# Set them in place
+		check_empty_sed "APP_URL" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
+		check_empty_sed "DOC_APP_URL" "$PAG_CFG_FILE" "docs.localhost.localdomain" "$DOC_APP_URL"
+		check_empty_sed "GIT_URL_SSH" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
+		check_empty_sed "GIT_URL_GIT" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
+else
+	echo "There is only a yes | no response."
+fi
+done
 
 #REDIS
 #Using mured.sh - https://github.com/switnet-ltd/mured
@@ -240,7 +268,7 @@ echo "Do you want to setup your domain?"
 		if [ $setdomain == no ]; then
 			echo "Ok, come back when you are ready."
 			exit
-		elif [ $text == yes ]; then
+		elif [ $setdomain == yes ]; then
 			echo "Let's get to it ..."
 			install_ifnot apache2
 			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
@@ -273,10 +301,10 @@ ExecStart=$PAG_HOME_EXT/venv/bin/python3 gunicorn --bind 0.0.0.0:5000 -c $PAG_HO
 ExecStop=/bin/kill
 [Install]
 WantedBy=multi-user.target
-Alias=$PAG_USER_service.service
+Alias=${PAG_USER}_server.service
 SERVICE
 systemctl enable $INIT_FILE
-systemctl start $PAG_USER_service.service
+systemctl start ${PAG_USER}_server.service
 
 #ToDo: Replaced by a startup script
 #sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/runserver.py --host=0.0.0.0 -p 5000"

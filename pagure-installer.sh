@@ -9,7 +9,7 @@ if ! [ $(id -u) = 0 ]; then
    exit 1
 fi
 echo "#--------------------------------------------------
-# Installing system dependancies
+# Checking and installing system dependancies...
 #--------------------------------------------------"
 apt -qq update && \
 apt -yqq install \
@@ -96,10 +96,10 @@ service postgresql restart
 #--------------------------------------------------
 # System Settings
 #--------------------------------------------------
-echo -e "\n---- Create Pagure system user ----"
+echo -e "\n---- Creating $PAG_USER system user ----"
 adduser --system --quiet --shell=/bin/bash --home=$PAG_HOME --gecos 'Pagure' --group $PAG_USER
 usermod -a -G www-data $PAG_USER
-echo -e "\n---- Create Log directory ----"
+echo -e "\n---- Creating log directory ----"
 mkdir $PAG_HOME/log/
 chown $PAG_USER:$PAG_USER $PAG_HOME/log/
 
@@ -109,7 +109,7 @@ sudo su $PAG_USER -c "git clone --depth 1 https://github.com/Pagure/pagure $PAG_
 #Apache copy
 mkdir -p /var/www/releases_$sufix
 chown -R $PAG_USER:$PAG_USER /var/www/releases_$sufix
-echo -e "\n---- Install tool packages ----"
+echo -e "\n---- Installing python (pip) dependacies for pagure ----"
 cd $PAG_HOME_EXT
 sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
@@ -141,7 +141,7 @@ sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|hos
 sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|db_name|$PAG_PDB|" $PAG_CFG_FILE
 
 #Enable and setup email
-echo -e "\nDo you want to enable and configure email sending? ( yes or no ):"
+echo -e "\nDo you want to enable and configure email sending? (yes|no):"
 while [[ $EMAIL_SET_ANS != yes && $EMAIL_SET_ANS != no ]]
 do
 	read EMAIL_SET_ANS
@@ -168,7 +168,7 @@ elif [ $EMAIL_SET_ANS = yes ]; then
 		60 90 0 \
 				"Email to receive traceback errors:"	1 1	"$EMAIL_SYS_ERR" 	1 40 40 0 \
 				"Email used to send notifications:"		2 1	"$NOTFY_EMAIL" 		2 40 40 0 \
-				"Domain email notification:"			3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
+				"Domain for email notification:"		3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
 				"SMTP Server:"  						4 1	"$SMTP_SRV"  		4 40 40 0 \
 				"SMTP Port (465):"	   					5 1	"$SMTP_PORT"  		5 40 40 0 \
 				"SMTP SSL (True|False):"				6 1	"$SMTP_SSL" 		6 40 40 0 \
@@ -200,7 +200,7 @@ echo "There is only a yes | no response."
 fi
 done
 
-echo -e "\nDo you want to enable and domain? ( yes or no ):"
+echo -e "\nDo you want to enable your domain? (yes|no):"
 while [[ $setdomain != yes && $setdomain != no ]]
 do
 	read setdomain
@@ -261,25 +261,27 @@ sed -i "s|#import|import|" $PAG_HOME/doc_pagure.wsgi
 sed -i "s|#sys.|sys.|" $PAG_HOME/doc_pagure.wsgi
 
 if [ ! -z "$APP_URL" ] && [ ! -z "$DOC_APP_URL" ]; then
-echo "Do you want to setup your domain?"
-	while [[ $setdomain != yes && $setdomain != no ]]
+echo -e "\nDo you want to setup apache config (not enabled by default)? (yes|no)"
+	while [[ $a2domain != yes && $a2domain != no ]]
 	do
-	read setdomain
-		if [ $setdomain == no ]; then
-			echo "Ok, come back when you are ready."
-			exit
-		elif [ $setdomain == yes ]; then
+	read a2domain
+		if [ $a2domain = no ]; then
+			echo "Ok, if you change your mind, you'll need to configure manually"
+		elif [ $a2domain = yes ]; then
 			echo "Let's get to it ..."
 			install_ifnot apache2
 			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|=git|=$PAG_USER|g"
+			sed -i "s|=git|=$PAG_USER|g" /etc/apache2/sites-available/$APP_URL.conf
 			sed -i "s|localhost.localdomain|$APP_URL|" /etc/apache2/sites-available/$APP_URL.conf
 			sed -i "s|docs.localhost.localdomain|$DOC_APP_URL|" /etc/apache2/sites-available/$APP_URL.conf
 			sed -i "s|/usr/share/pagure/pagure.wsgi|$PAG_HOME/pagure.wsgi|" /etc/apache2/sites-available/$APP_URL.conf
 			sed -i "s|/usr/share/pagure/doc_pagure.wsgi|$PAG_HOME/doc_pagure.wsgi|" /etc/apache2/sites-available/$APP_URL.conf
 			sed -i "s|/usr/lib/pythonX.Y/site-packages/pagure/static/|$PAG_HOME_EXT/pagure/static/|" /etc/apache2/sites-available/$APP_URL.conf
 			sed -i "s|/var/www/releases|/var/www/releases_$sufix|" /etc/apache2/sites-available/$APP_URL.conf
-			a2ensite $APP_URL.conf
+			sed -i "s|#||" /etc/apache2/sites-available/$APP_URL.conf
+			# SSL keys needed, force manual setup.
+			sed -i "s|SSLCertificate|#SSLCertificate|" /etc/apache2/sites-available/$APP_URL.conf
+			#a2ensite $APP_URL.conf
 		fi
 	done
 fi

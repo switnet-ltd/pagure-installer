@@ -25,20 +25,29 @@ apt -yqq install \
 				python3-gdbm \
 				redis-server &>/dev/null
 
+install_ifnot() {
+if [ "$(dpkg-query -W -f='${Status}' $1 2>/dev/null | grep -c "ok")" == "1" ]; then
+	echo " $1 is installed, skipping..."
+    else
+    	echo -e "\n---- Installing $1 ----"
+		apt -yqq install $1
+fi
+}
+check_empty_sed() {
+if [[ -z "$4" ]]; then
+	echo "Empty $1 variable, leaving default"
+else
+	sed -i "$(grep -n $1 $2 | head -n 1 | cut -d ":" -f1) s|$3|$4|" $2
+fi
+}
+
 #--------------------------------------------------
 # Install PostgreSQL Server
 #--------------------------------------------------
-apt install -yqq language-pack-en-base
-
-if [ "$(dpkg-query -W -f='${Status}' postgresql-9.5 2>/dev/null | grep -c "ok")" == "1" ]; then
-		echo "Postgresql is installed, skipping..."
-    else
-		echo -e "\n---- Install PostgreSQL Server ----"
-		apt -yqq install postgresql-9.5
-
-		echo -e "\n---- PostgreSQL Settings  ----"
-		sed -i "s|#listen_addresses = 'localhost'|listen_addresses = '*'|g" /etc/postgresql/9.5/main/postgresql.conf
-fi
+install_ifnot language-pack-en-base
+install_ifnot postgresql-9.5
+echo -e "\n---- PostgreSQL Settings  ----"
+sed -i "s|#listen_addresses = 'localhost'|listen_addresses = '*'|g" /etc/postgresql/9.5/main/postgresql.conf
 
 echo "
 Please select the suffix for this pagure instance.
@@ -68,6 +77,8 @@ PDB_PASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
 PAG_HOME="/opt/$PAG_USER"
 PAG_HOME_EXT="$PAG_HOME/$PAG_USER-server"
 PAG_CFG_FILE="$PAG_HOME/pagure.cfg"
+INIT_FILE=/lib/systemd/system/$PAG_USER-server.service
+LOG_FILE=/var/log/$PAG_USER/$PAG_USER-server.log
 #--------------------------------------------------
 # Create Postgresql user
 #--------------------------------------------------
@@ -101,7 +112,7 @@ cd $PAG_HOME_EXT
 sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install pygit2==0.24 psycopg2"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 gunicorn pygit2==0.24"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
 sudo su $PAG_USER -c "mkdir $PAG_HOME_EXT/{repos,docs,forks,tickets,requests}"
@@ -109,9 +120,11 @@ sudo su $PAG_USER -c "mkdir $PAG_HOME/remotes"
 sudo su $PAG_USER -c "mkdir $PAG_HOME/.gitolite/{conf,keydir,logs}"
 #Add empty gitolite
 sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
-#Setup config file
+#Setup config files
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/gitolite3.rc $PAG_HOME/.gitolite.rc"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.cfg.sample $PAG_CFG_FILE"
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.wsgi $PAG_HOME/pagure.wsgi"
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/doc_pagure.wsgi $PAG_HOME/doc_pagure.wsgi"
 
 SKEY=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 SMAIL=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
@@ -162,14 +175,6 @@ SMTP_USR=$(echo "$SETUP_EMAIL" | sed -n 7p)
 SMTP_PSWD=$(echo "$SETUP_EMAIL" | sed -n 8p)
 
 # Set them in place
-
-check_empty_sed() {
-if [[ -z "$4" ]]; then
-	echo "Empty $1 variable, leaving default"
-else
-	sed -i "$(grep -n $1 $2 | head -n 1 | cut -d ":" -f1) s|$3|$4|" $2
-fi
-}
 check_empty_sed "EMAIL_ERROR" "$PAG_CFG_FILE" "root@localhost" "$EMAIL_SYS_ERR"
 check_empty_sed "SMTP_SERVER" "$PAG_CFG_FILE" "localhost" "$SMTP_SRV"
 check_empty_sed "SMTP_PORT" "$PAG_CFG_FILE" "25" "$SMTP_PORT"
@@ -214,7 +219,64 @@ usermod -aG redis $PAG_USER
 #Set conf env
 export PAGURE_CONFIG=$PAG_CFG_FILE
 #Create the inital database scheme
-sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic.ini|" $PAG_HOME_EXT/files/alembic.ini
+sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME_EXT/files/alembic.ini
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME_EXT/files/alembic.ini"
+
+# Setup WSGI
+sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/pagure.wsgi
+sed -i "s|/path/to/pagure/|$PAG_HOME_EXT|" $PAG_HOME/pagure.wsgi
+sed -i "s|#import|import|" $PAG_HOME/pagure.wsgi
+sed -i "s|#sys.|sys.|" $PAG_HOME/pagure.wsgi
+sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/doc_pagure.wsgi
+sed -i "s|/path/to/pagure/|$PAG_HOME_EXT|" $PAG_HOME/doc_pagure.wsgi
+sed -i "s|#import|import|" $PAG_HOME/doc_pagure.wsgi
+sed -i "s|#sys.|sys.|" $PAG_HOME/doc_pagure.wsgi
+
+if [ ! -z "$APP_URL" ] && [ ! -z "$DOC_APP_URL" ]; then
+echo "Do you want to setup your domain?"
+	while [[ $setdomain != yes && $setdomain != no ]]
+	do
+	read setdomain
+		if [ $setdomain == no ]; then
+			echo "Ok, come back when you are ready."
+			exit
+		elif [ $text == yes ]; then
+			echo "Let's get to it ..."
+			install_ifnot apache2
+			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|=git|=$PAG_USER|g"
+			sed -i "s|localhost.localdomain|$APP_URL|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|docs.localhost.localdomain|$DOC_APP_URL|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|/usr/share/pagure/pagure.wsgi|$PAG_HOME/pagure.wsgi|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|/usr/share/pagure/doc_pagure.wsgi|$PAG_HOME/doc_pagure.wsgi|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|/usr/lib/pythonX.Y/site-packages/pagure/static/|$PAG_HOME_EXT/pagure/static/|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|/var/www/releases|/var/www/releases_$sufix|" /etc/apache2/sites-available/$APP_URL.conf
+			a2ensite $APP_URL.conf
+		fi
+	done
+fi
+
+cat  << SERVICE >> $INIT_FILE
+[Unit]
+Description=$PAG_USER Server
+Requires=postgresql.service
+After=postgresql.service redis.service
+[Service]
+Type=simple
+PermissionsStartOnly=true
+User=$PAG_USER
+Group=$PAG_USER
+SyslogIdentifier=$PAG_USER
+PIDFile=/run/$PAG_USER/$PAG_USER.pid
+ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
+ExecStart=$PAG_HOME_EXT/venv/bin/python3 gunicorn --bind 0.0.0.0:5000 -c $PAG_HOME/pagure.wsgi --pid=/run/$PAG_USER/$PAG_USER.pid --access-logfile $LOG_FILE --error-logfile $LOG_FILE --log-level info
+ExecStop=/bin/kill
+[Install]
+WantedBy=multi-user.target
+Alias=$PAG_USER_service.service
+SERVICE
+systemctl enable $INIT_FILE
+systemctl start $PAG_USER_service.service
+
 #ToDo: Replaced by a startup script
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/runserver.py --host=0.0.0.0 -p 5000"
+#sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/runserver.py --host=0.0.0.0 -p 5000"

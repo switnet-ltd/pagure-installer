@@ -81,6 +81,7 @@ PAG_HOME_EXT="$PAG_HOME/$PAG_USER-server"
 PAG_CFG_FILE="$PAG_HOME/pagure.cfg"
 INIT_FILE=/lib/systemd/system/$PAG_USER-server.service
 LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
+ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 #--------------------------------------------------
 # Create Postgresql user
 #--------------------------------------------------
@@ -220,11 +221,13 @@ elif [ $setdomain = yes ]; then
 		40 90 0 \
 				"Pagure's domain:"		1 1	"$APP_URL" 	1 40 40 0 \
 				"Pagure's docs domain:" 2 1	"$DOC_APP_URL"  	2 40 40 0 \
+				"Server Port:" 			3 1	"$PAG_PORT"  	3 40 40 0 \
 		  3>&1 1>&2 2>&3 3>&- \
 		)
 		# Extract variables
 		APP_URL=$(echo "$SETUP_DOMAIN" | sed -n 1p)
 		DOC_APP_URL=$(echo "$SETUP_DOMAIN" | sed -n 2p)
+		PAG_PORT=$(echo "$SETUP_DOMAIN" | sed -n 3p)
 		# Set them in place
 		check_empty_sed "APP_URL" "$PAG_CFG_FILE" "localhost.localdomain" "$APP_URL"
 		check_empty_sed "DOC_APP_URL" "$PAG_CFG_FILE" "docs.localhost.localdomain" "$DOC_APP_URL"
@@ -301,7 +304,7 @@ WorkingDirectory=$PAG_HOME_EXT
 SyslogIdentifier=$PAG_USER
 PIDFile=/run/$PAG_USER/$PAG_USER.pid
 ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
-ExecStart=$PAG_HOME_EXT/venv/bin/gunicorn --bind 0.0.0.0:5000 'pagure.flask_app:create_app()' --env PAGURE_CONFIG=$PAGURE_CONFIG --pid=/run/$PAG_USER/$PAG_USER.pid --access-logfile $LOG_FILE --error-logfile $LOG_FILE --log-level info
+ExecStart=$PAG_HOME_EXT/venv/bin/gunicorn --bind 0.0.0.0:$PAG_PORT 'pagure.flask_app:create_app()' --env PAGURE_CONFIG=$PAGURE_CONFIG --pid=/run/$PAG_USER/$PAG_USER.pid --access-logfile $LOG_FILE --error-logfile $LOG_FILE --log-level info
 ExecStop=/bin/kill -s TERM \$MAINPID
 [Install]
 WantedBy=multi-user.target
@@ -310,5 +313,6 @@ SERVICE
 systemctl enable $INIT_FILE
 systemctl start ${PAG_USER}_server.service
 
+echo "Check your browser at: http://$ADDRESS:$PAG_PORT"
 #ToDo: Replaced by a startup script
 #sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/runserver.py --host=0.0.0.0 -p 5000"

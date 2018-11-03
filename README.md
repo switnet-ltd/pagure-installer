@@ -1,7 +1,7 @@
 # Pagure Installer - Beta
 Bash installer for Pagure on *buntu 16.04 LTS based systems such as Trisquel 8.
 
-**Please note that this is a work in progress**
+**Please note that this is a work in progress, not production ready**
 
 ## Features
 * Support several instances at once by using a sufix
@@ -17,7 +17,6 @@ Bash installer for Pagure on *buntu 16.04 LTS based systems such as Trisquel 8.
 
 ## Requirements
 * *buntu 16.04 / Trisquel 8
-* python 3
 * more TBD
 
 

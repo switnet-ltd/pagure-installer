@@ -80,7 +80,7 @@ PAG_HOME="/opt/$PAG_USER"
 PAG_HOME_EXT="$PAG_HOME/$PAG_USER-server"
 PAG_CFG_FILE="$PAG_HOME/pagure.cfg"
 INIT_FILE=/lib/systemd/system/$PAG_USER-server.service
-LOG_FILE=/var/log/$PAG_USER/$PAG_USER-server.log
+LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
 #--------------------------------------------------
 # Create Postgresql user
 #--------------------------------------------------
@@ -105,7 +105,7 @@ chown $PAG_USER:$PAG_USER $PAG_HOME/log/
 
 #Retrieve the sources
 cd $PAG_HOME
-sudo su $PAG_USER -c "git clone --depth 1 https://github.com/Pagure/pagure $PAG_HOME_EXT/"
+sudo su $PAG_USER -c "git clone --depth 1 https://pagure.io/pagure.git $PAG_HOME_EXT/"
 #Apache copy
 mkdir -p /var/www/releases_$sufix
 chown -R $PAG_USER:$PAG_USER /var/www/releases_$sufix
@@ -238,6 +238,7 @@ done
 #REDIS
 #Using mured.sh - https://github.com/switnet-ltd/mured
 export RED_SUFIX=$sufix
+export RED_CON=1
 bash <(curl -s https://raw.githubusercontent.com/switnet-ltd/mured/master/mured.sh)
 #Find port from sufix
 REDIS_PORT=$(grep -n "port" $(find /etc/redis/redis*.conf) | grep -v "[0-9]:#" | grep _$sufix | awk 'NF>1{print $NF}')
@@ -248,15 +249,15 @@ usermod -aG redis $PAG_USER
 export PAGURE_CONFIG=$PAG_CFG_FILE
 #Create the inital database scheme
 sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME_EXT/files/alembic.ini
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME_EXT/files/alembic.ini"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME_EXT/files/alembic.ini -c $PAG_CFG_FILE"
 
 # Setup WSGI
 sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/pagure.wsgi
-sed -i "s|/path/to/pagure/|$PAG_HOME_EXT|" $PAG_HOME/pagure.wsgi
+sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/pagure.wsgi
 sed -i "s|#import|import|" $PAG_HOME/pagure.wsgi
 sed -i "s|#sys.|sys.|" $PAG_HOME/pagure.wsgi
 sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/doc_pagure.wsgi
-sed -i "s|/path/to/pagure/|$PAG_HOME_EXT|" $PAG_HOME/doc_pagure.wsgi
+sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/doc_pagure.wsgi
 sed -i "s|#import|import|" $PAG_HOME/doc_pagure.wsgi
 sed -i "s|#sys.|sys.|" $PAG_HOME/doc_pagure.wsgi
 
@@ -296,11 +297,12 @@ Type=simple
 PermissionsStartOnly=true
 User=$PAG_USER
 Group=$PAG_USER
+WorkingDirectory=$PAG_HOME_EXT
 SyslogIdentifier=$PAG_USER
 PIDFile=/run/$PAG_USER/$PAG_USER.pid
 ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
-ExecStart=$PAG_HOME_EXT/venv/bin/python3 gunicorn --bind 0.0.0.0:5000 -c $PAG_HOME/pagure.wsgi --pid=/run/$PAG_USER/$PAG_USER.pid --access-logfile $LOG_FILE --error-logfile $LOG_FILE --log-level info
-ExecStop=/bin/kill
+ExecStart=$PAG_HOME_EXT/venv/bin/gunicorn --bind 0.0.0.0:5000 'pagure.flask_app:create_app()' --env PAGURE_CONFIG=$PAGURE_CONFIG --pid=/run/$PAG_USER/$PAG_USER.pid --access-logfile $LOG_FILE --error-logfile $LOG_FILE --log-level info
+ExecStop=/bin/kill -s TERM \$MAINPID
 [Install]
 WantedBy=multi-user.target
 Alias=${PAG_USER}_server.service

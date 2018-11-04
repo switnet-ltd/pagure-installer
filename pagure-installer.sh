@@ -56,7 +56,13 @@ Please select the suffix for this pagure instance.
 "
 #Add what has been used  and such as if empty loop
 echo "Pagure sufix:"
-PAG_USED=$(grep postgres /opt/pag*/pagure.cfg | grep -v user | cut -d ":" -f3 | cut -d "_" -f2 | sort -r)
+#PAG_USED=$(grep postgres /opt/pag*/pagure.cfg | grep -v user | cut -d ":" -f3 | cut -d "_" -f2 | sort -r)
+PAG_USED=$(sudo -u postgres psql -c "SELECT r.rolname as username,r1.rolname as "role" \
+ FROM pg_catalog.pg_roles r LEFT JOIN pg_catalog.pg_auth_members m \
+ ON (m.member = r.oid) \
+ LEFT JOIN pg_roles r1 ON (m.roleid=r1.oid) \
+ WHERE r.rolcanlogin \
+ ORDER BY 1;" | sed -n '/pag/p' | cut -d " " -f2 | cut -d "_" -f2 | sort -r)
 while [[ -z $sufix ]]
 do
 echo "These have been already taken (avoid them):"
@@ -72,6 +78,16 @@ else
 	echo "Please enter a small sufix for this instance."
 fi
 done
+#Select port and show used by installation.
+PAG_PORTS_TAKEN=$(grep 0.0.0.0 /lib/systemd/system/pag*.service | cut -d "'" -f1 | awk 'NF>1{print $NF}' | cut -d ":" -f2 | sort -r)
+echo "Choose the port: 5000-5999, the following ports are already taken:"
+echo "Enter port:"
+if [[ -z "$PAG_PORTS_TAKEN" ]]; then
+	echo " -> Seems there is no other instance present."
+else
+	echo $PAG_PORTS_TAKEN
+fi
+read PAG_PORT
 PAG_USER="pag_$sufix"
 PAG_PDB="${PAG_USER}_db"
 SHUF=$(shuf -i 15-19 -n 1)
@@ -81,6 +97,7 @@ PAG_HOME_EXT="$PAG_HOME/$PAG_USER-server"
 PAG_CFG_FILE="$PAG_HOME/pagure.cfg"
 INIT_FILE=/lib/systemd/system/$PAG_USER-server.service
 LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
+ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 #--------------------------------------------------
 # Create Postgresql user
 #--------------------------------------------------
@@ -179,6 +196,7 @@ elif [ $EMAIL_SET_ANS = yes ]; then
 		# Extract variables
 		EMAIL_SYS_ERR=$(echo "$SETUP_EMAIL" | sed -n 1p)
 		NOTFY_EMAIL=$(echo "$SETUP_EMAIL" | sed -n 2p)
+		#ask the purpose of NOTIFY_DOMAIN, seems to not have an effect:
 		NOTFY_DOMAIN=$(echo "$SETUP_EMAIL" | sed -n 3p)
 		SMTP_SRV=$(echo "$SETUP_EMAIL" | sed -n 4p)
 		SMTP_PORT=$(echo "$SETUP_EMAIL" | sed -n 5p)
@@ -301,7 +319,7 @@ WorkingDirectory=$PAG_HOME_EXT
 SyslogIdentifier=$PAG_USER
 PIDFile=/run/$PAG_USER/$PAG_USER.pid
 ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
-ExecStart=$PAG_HOME_EXT/venv/bin/gunicorn --bind 0.0.0.0:5000 'pagure.flask_app:create_app()' --env PAGURE_CONFIG=$PAGURE_CONFIG --pid=/run/$PAG_USER/$PAG_USER.pid --access-logfile $LOG_FILE --error-logfile $LOG_FILE --log-level info
+ExecStart=$PAG_HOME_EXT/venv/bin/gunicorn --bind 0.0.0.0:$PAG_PORT 'pagure.flask_app:create_app()' --env PAGURE_CONFIG=$PAGURE_CONFIG --pid=/run/$PAG_USER/$PAG_USER.pid --access-logfile $LOG_FILE --error-logfile $LOG_FILE --log-level info
 ExecStop=/bin/kill -s TERM \$MAINPID
 [Install]
 WantedBy=multi-user.target
@@ -310,5 +328,6 @@ SERVICE
 systemctl enable $INIT_FILE
 systemctl start ${PAG_USER}_server.service
 
+echo "Check your browser at: http://$ADDRESS:$PAG_PORT"
 #ToDo: Replaced by a startup script
 #sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/runserver.py --host=0.0.0.0 -p 5000"

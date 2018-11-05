@@ -27,6 +27,9 @@ apt -yqq install \
 				python3-gdbm \
 				redis-server &>/dev/null
 
+echo "gitolite3 gitolite3/adminkey string " | debconf-set-selections
+apt -yqq install gitolite3
+
 install_ifnot() {
 if [ "$(dpkg-query -W -f='${Status}' $1 2>/dev/null | grep -c "ok")" == "1" ]; then
 	echo " $1 is installed, skipping..."
@@ -142,8 +145,9 @@ sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
 #Setup config files
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/gitolite3.rc $PAG_HOME/.gitolite.rc"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.cfg.sample $PAG_CFG_FILE"
-sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.wsgi $PAG_HOME/pagure.wsgi"
-sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/doc_pagure.wsgi $PAG_HOME/doc_pagure.wsgi"
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/alembic.ini $PAG_HOME/alembic.ini"
+#sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.wsgi $PAG_HOME/pagure.wsgi"
+#sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/doc_pagure.wsgi $PAG_HOME/doc_pagure.wsgi"
 
 SKEY=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 SMAIL=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
@@ -185,9 +189,9 @@ elif [ $EMAIL_SET_ANS = yes ]; then
 		60 90 0 \
 				"Email to receive traceback errors:"	1 1	"$EMAIL_SYS_ERR" 	1 40 40 0 \
 				"Email used to send notifications:"		2 1	"$NOTFY_EMAIL" 		2 40 40 0 \
-				"Domain for email notification:"		3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
+				"Domain for notification headers:"		3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
 				"SMTP Server:"  						4 1	"$SMTP_SRV"  		4 40 40 0 \
-				"SMTP Port (465):"	   					5 1	"$SMTP_PORT"  		5 40 40 0 \
+				"SMTP SSL Port (465):"	   				5 1	"$SMTP_PORT"  		5 40 40 0 \
 				"SMTP SSL (True|False):"				6 1	"$SMTP_SSL" 		6 40 40 0 \
 				"SMTP Username:"						7 1	"$SMTP_USR" 		7 40 40 0 \
 				"SMTP Password:"						8 1	"$SMTP_PSWD" 		8 40 40 0 \
@@ -196,7 +200,6 @@ elif [ $EMAIL_SET_ANS = yes ]; then
 		# Extract variables
 		EMAIL_SYS_ERR=$(echo "$SETUP_EMAIL" | sed -n 1p)
 		NOTFY_EMAIL=$(echo "$SETUP_EMAIL" | sed -n 2p)
-		#ask the purpose of NOTIFY_DOMAIN, seems to not have an effect:
 		NOTFY_DOMAIN=$(echo "$SETUP_EMAIL" | sed -n 3p)
 		SMTP_SRV=$(echo "$SETUP_EMAIL" | sed -n 4p)
 		SMTP_PORT=$(echo "$SETUP_EMAIL" | sed -n 5p)
@@ -266,18 +269,18 @@ usermod -aG redis $PAG_USER
 #Set conf env
 export PAGURE_CONFIG=$PAG_CFG_FILE
 #Create the inital database scheme
-sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME_EXT/files/alembic.ini
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME_EXT/files/alembic.ini -c $PAG_CFG_FILE"
+sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME/alembic.ini
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME/alembic.ini -c $PAG_CFG_FILE"
 
-# Setup WSGI
-sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/pagure.wsgi
-sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/pagure.wsgi
-sed -i "s|#import|import|" $PAG_HOME/pagure.wsgi
-sed -i "s|#sys.|sys.|" $PAG_HOME/pagure.wsgi
-sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/doc_pagure.wsgi
-sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/doc_pagure.wsgi
-sed -i "s|#import|import|" $PAG_HOME/doc_pagure.wsgi
-sed -i "s|#sys.|sys.|" $PAG_HOME/doc_pagure.wsgi
+## Setup WSGI
+#sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/pagure.wsgi
+#sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/pagure.wsgi
+#sed -i "s|#import|import|" $PAG_HOME/pagure.wsgi
+#sed -i "s|#sys.|sys.|" $PAG_HOME/pagure.wsgi
+#sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/doc_pagure.wsgi
+#sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/doc_pagure.wsgi
+#sed -i "s|#import|import|" $PAG_HOME/doc_pagure.wsgi
+#sed -i "s|#sys.|sys.|" $PAG_HOME/doc_pagure.wsgi
 
 if [ ! -z "$APP_URL" ] && [ ! -z "$DOC_APP_URL" ]; then
 echo -e "\nDo you want to setup apache config (not enabled by default)? (yes|no)"
@@ -329,5 +332,3 @@ systemctl enable $INIT_FILE
 systemctl start ${PAG_USER}_server.service
 
 echo "Check your browser at: http://$ADDRESS:$PAG_PORT"
-#ToDo: Replaced by a startup script
-#sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/runserver.py --host=0.0.0.0 -p 5000"

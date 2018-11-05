@@ -189,7 +189,7 @@ elif [ $EMAIL_SET_ANS = yes ]; then
 		60 90 0 \
 				"Email to receive traceback errors:"	1 1	"$EMAIL_SYS_ERR" 	1 40 40 0 \
 				"Email used to send notifications:"		2 1	"$NOTFY_EMAIL" 		2 40 40 0 \
-				"Domain for notification headers:"		3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
+				"Mail domain notification (headers):"	3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
 				"SMTP Server:"  						4 1	"$SMTP_SRV"  		4 40 40 0 \
 				"SMTP SSL Port (465):"	   				5 1	"$SMTP_PORT"  		5 40 40 0 \
 				"SMTP SSL (True|False):"				6 1	"$SMTP_SSL" 		6 40 40 0 \

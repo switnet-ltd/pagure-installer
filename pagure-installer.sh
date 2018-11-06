@@ -186,7 +186,7 @@ elif [ $EMAIL_SET_ANS = yes ]; then
 				--backtitle "Pagure Mail Setup" \
 				--title "Pagure - Mail Options" \
 				--form "Set system values for email" \
-		60 90 0 \
+		20 90 0 \
 				"Email to receive traceback errors:"	1 1	"$EMAIL_SYS_ERR" 	1 40 40 0 \
 				"Email used to send notifications:"		2 1	"$NOTFY_EMAIL" 		2 40 40 0 \
 				"Mail domain notification (headers):"	3 1	"$NOTFY_DOMAIN" 	3 40 40 0 \
@@ -238,7 +238,7 @@ elif [ $setdomain = yes ]; then
 				--backtitle "Pagure Domain Setup" \
 				--title "Pagure - Domain Options" \
 				--form "Set system values for domain" \
-		40 90 0 \
+		10 90 0 \
 				"Pagure's domain:"		1 1	"$APP_URL" 	1 40 40 0 \
 				"Pagure's docs domain:" 2 1	"$DOC_APP_URL"  	2 40 40 0 \
 		  3>&1 1>&2 2>&3 3>&- \

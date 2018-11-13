@@ -134,11 +134,10 @@ cd $PAG_HOME_EXT
 sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 gunicorn pygit2==0.24"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 celery pygit2==0.24"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
-sudo su $PAG_USER -c "mkdir $PAG_HOME_EXT/{repos,docs,forks,tickets,requests}"
-sudo su $PAG_USER -c "mkdir $PAG_HOME/remotes"
+sudo su $PAG_USER -c "mkdir $PAG_HOME/{repos,docs,forks,tickets,requests,remotes,releases}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 #Add empty gitolite
 sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
@@ -146,8 +145,8 @@ sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/gitolite3.rc $PAG_HOME/.gitolite.rc"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.cfg.sample $PAG_CFG_FILE"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/alembic.ini $PAG_HOME/alembic.ini"
-#sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.wsgi $PAG_HOME/pagure.wsgi"
-#sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/doc_pagure.wsgi $PAG_HOME/doc_pagure.wsgi"
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.wsgi $PAG_HOME/pagure.wsgi"
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/doc_pagure.wsgi $PAG_HOME/doc_pagure.wsgi"
 
 SKEY=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 SMAIL=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
@@ -167,7 +166,7 @@ while [[ $EMAIL_SET_ANS != yes && $EMAIL_SET_ANS != no ]]
 do
 	read EMAIL_SET_ANS
 if [ $EMAIL_SET_ANS = no ]; then
-	echo "Please if you change your mind, you'll need to configure manually!"
+	echo "If you change your mind, please configure it manually."
 elif [ $EMAIL_SET_ANS = yes ]; then
 	sed -i "s|.*EMAIL_SEND.*|EMAIL_SEND = True|" $PAG_CFG_FILE
 	echo "Starting email setup"
@@ -226,7 +225,7 @@ while [[ $setdomain != yes && $setdomain != no ]]
 do
 	read setdomain
 if [ $setdomain = no ]; then
-	echo "Please if you change your mind, you'll need to configure manually!"
+	echo "If you change your mind, please configure it manually."
 elif [ $setdomain = yes ]; then
 	echo "Seting domain URL"
 		#DOMAIN SETUP
@@ -273,14 +272,14 @@ sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOM
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME/alembic.ini -c $PAG_CFG_FILE"
 
 ## Setup WSGI
-#sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/pagure.wsgi
-#sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/pagure.wsgi
-#sed -i "s|#import|import|" $PAG_HOME/pagure.wsgi
-#sed -i "s|#sys.|sys.|" $PAG_HOME/pagure.wsgi
-#sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/doc_pagure.wsgi
-#sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/doc_pagure.wsgi
-#sed -i "s|#import|import|" $PAG_HOME/doc_pagure.wsgi
-#sed -i "s|#sys.|sys.|" $PAG_HOME/doc_pagure.wsgi
+sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/pagure.wsgi
+sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/pagure.wsgi
+sed -i "s|#import|import|" $PAG_HOME/pagure.wsgi
+sed -i "s|#sys.|sys.|" $PAG_HOME/pagure.wsgi
+sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/doc_pagure.wsgi
+sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/doc_pagure.wsgi
+sed -i "s|#import|import|" $PAG_HOME/doc_pagure.wsgi
+sed -i "s|#sys.|sys.|" $PAG_HOME/doc_pagure.wsgi
 
 if [ ! -z "$APP_URL" ] && [ ! -z "$DOC_APP_URL" ]; then
 echo -e "\nDo you want to setup apache config (not enabled by default)? (yes|no)"
@@ -288,21 +287,24 @@ echo -e "\nDo you want to setup apache config (not enabled by default)? (yes|no)
 	do
 	read a2domain
 		if [ $a2domain = no ]; then
-			echo "Ok, if you change your mind, you'll need to configure manually"
+			echo "If you change your mind, please configure it manually."
 		elif [ $a2domain = yes ]; then
 			echo "Let's get to it ..."
 			install_ifnot apache2
+			install_ifnot libapache2-mod-wsgi-py3
 			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|=git|=$PAG_USER|g" /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|localhost.localdomain|$APP_URL|" /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|docs.localhost.localdomain|$DOC_APP_URL|" /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|/usr/share/pagure/pagure.wsgi|$PAG_HOME/pagure.wsgi|" /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|/usr/share/pagure/doc_pagure.wsgi|$PAG_HOME/doc_pagure.wsgi|" /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|/usr/lib/pythonX.Y/site-packages/pagure/static/|$PAG_HOME_EXT/pagure/static/|" /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|/var/www/releases|/var/www/releases_$sufix|" /etc/apache2/sites-available/$APP_URL.conf
-			sed -i "s|#||" /etc/apache2/sites-available/$APP_URL.conf
+			AP2CONF="/etc/apache2/sites-available/$APP_URL.conf"
+			sed -i "s|=git|=$PAG_USER|g" $AP2CONF
+			sed -i "s|localhost.localdomain|$APP_URL|" $AP2CONF
+			sed -i "s|docs.localhost.localdomain|$DOC_APP_URL|" $AP2CONF
+			sed -i "s|/usr/share/pagure/pagure.wsgi|$PAG_HOME/pagure.wsgi|" $AP2CONF
+			sed -i "s|/usr/share/pagure/doc_pagure.wsgi|$PAG_HOME/doc_pagure.wsgi|" $AP2CONF
+			sed -i "s|/usr/lib/pythonX.Y/site-packages/pagure/static/|$PAG_HOME_EXT/pagure/static/|" $AP2CONF
+			sed -i "s|/var/www/releases|$PAG_HOME/releases|" $AP2CONF
+			sed -i "s|/path/to/git/repositories|$PAG_HOME/repos|" $AP2CONF
+			sed -i "s|#||" $AP2CONF
 			# SSL keys needed, force manual setup.
-			sed -i "s|SSLCertificate|#SSLCertificate|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|SSLCertificate|#SSLCertificate|" $AP2CONF
 			#a2ensite $APP_URL.conf
 		fi
 	done
@@ -328,6 +330,27 @@ ExecStop=/bin/kill -s TERM \$MAINPID
 WantedBy=multi-user.target
 Alias=${PAG_USER}_server.service
 SERVICE
+
+cat  << CELERY >> $INIT_FILE
+[Unit]
+Description=$PAG_USER Server
+Requires=postgresql.service
+After=postgresql.service redis.service
+[Service]
+Type=simple
+PermissionsStartOnly=true
+User=$PAG_USER
+Group=$PAG_USER
+WorkingDirectory=$PAG_HOME_EXT
+SyslogIdentifier=$PAG_USER
+PIDFile=/run/$PAG_USER/$PAG_USER.pid
+ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
+ExecStart=$PAG_HOME_EXT/venv/bin/celery --bind 0.0.0.0:$PAG_PORT 'pagure.flask_app:create_app()' --env PAGURE_CONFIG=$PAGURE_CONFIG --pid=/run/$PAG_USER/$PAG_USER.pid --access-logfile $LOG_FILE --error-logfile $LOG_FILE --log-level info
+ExecStop=/bin/kill -s TERM \$MAINPID
+[Install]
+WantedBy=multi-user.target
+Alias=${PAG_USER}_server.service
+CELERY
 systemctl enable $INIT_FILE
 systemctl start ${PAG_USER}_server.service
 

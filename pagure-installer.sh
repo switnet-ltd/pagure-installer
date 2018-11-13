@@ -236,7 +236,7 @@ elif [ $EMAIL_SET_ANS = yes ]; then
 		SMTP_PSWD=$(echo "$SETUP_EMAIL" | sed -n 9p)
 
 		# Set them in place
-		check_empty_sed "PAGURE_ADMIN_USERS" "$PAG_CFG_FILE" "\[\]" "\[\' $ADMIN_MAIL\' \]"
+		check_empty_sed "PAGURE_ADMIN_USERS" "$PAG_CFG_FILE" "\[\]" "\[ \'$ADMIN_MAIL\' \]"
 		check_empty_sed "EMAIL_ERROR" "$PAG_CFG_FILE" "root@localhost" "$EMAIL_SYS_ERR"
 		check_empty_sed "SMTP_SERVER" "$PAG_CFG_FILE" "localhost" "$SMTP_SRV"
 		check_empty_sed "SMTP_PORT" "$PAG_CFG_FILE" "25" "$SMTP_PORT"

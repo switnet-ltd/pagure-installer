@@ -326,7 +326,10 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			update_certbot
 			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
 			AP2CONF="/etc/apache2/sites-available/$APP_URL.conf"
+			sed -i "s|run/wsgi|/var/run/wsgi|" $AP2CONF
 			sed -i "s|=git|=$PAG_USER|g" $AP2CONF
+			sed -i "/WSGIDaemonProcess/ s|display-name=pagure|display-name=$PAG_USER|" $AP2CONF
+			sed -i "/WSGIDaemonProcess/ s|$| python-home=$PAG_HOME_EXT/venv|" $AP2CONF
 			sed -i "s|localhost.localdomain|$APP_URL|" $AP2CONF
 			sed -i "s|docs.localhost.localdomain|$DOC_APP_URL|" $AP2CONF
 			sed -i "s|/usr/share/pagure/pagure.wsgi|$PAG_HOME/pagure.wsgi|" $AP2CONF

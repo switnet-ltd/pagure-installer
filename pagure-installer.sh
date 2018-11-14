@@ -59,7 +59,6 @@ Please select the suffix for this pagure instance.
 "
 #Add what has been used  and such as if empty loop
 echo "Pagure sufix:"
-#PAG_USED=$(grep postgres /opt/pag*/pagure.cfg | grep -v user | cut -d ":" -f3 | cut -d "_" -f2 | sort -r)
 PAG_USED=$(sudo -u postgres psql -c "SELECT r.rolname as username,r1.rolname as "role" \
  FROM pg_catalog.pg_roles r LEFT JOIN pg_catalog.pg_auth_members m \
  ON (m.member = r.oid) \
@@ -250,7 +249,8 @@ echo "There is only a yes | no response."
 fi
 done
 
-echo -e "\nDo you want to enable your domain? (yes|no):"
+echo -e "\nDo you want to configure your domain?* (yes|no):"
+echo -e "\n*(Configured domain is required for SSL setup)"
 while [[ $setdomain != yes && $setdomain != no ]]
 do
 	read setdomain
@@ -293,10 +293,13 @@ bash <(curl -s https://raw.githubusercontent.com/switnet-ltd/mured/master/mured.
 #Find port from sufix
 REDIS_PORT=$(grep -n "port" $(find /etc/redis/redis*.conf) | grep -v "[0-9]:#" | grep _$sufix | awk 'NF>1{print $NF}')
 sed -i "s|.*REDIS_PORT.*|REDIS_PORT = $REDIS_PORT|" $PAG_CFG_FILE
+RED_DBL=$(grep -n REDIS_DB $PAG_CFG_FILE | cut -d ":" -f1)
+RED_DBN=$(grep -n REDIS_DB $PAG_CFG_FILE |rev|awk '{printf $1}')
+BRK_INS=$((RED_DBL + 1))
+BRK_DBN=$((RED_DBN + 1))
+sed -i "${BRK_INS}i BROKER_URL = \'redis://localhost:$REDIS_PORT/$BRK_DBN\'" $PAG_CFG_FILE
 usermod -aG redis $PAG_USER
 
-#Set conf env
-export PAGURE_CONFIG=$PAG_CFG_FILE
 #Create the inital database scheme
 sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME/alembic.ini
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME/alembic.ini -c $PAG_CFG_FILE"
@@ -310,7 +313,7 @@ sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/doc_pagure.wsgi
 sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_HOME/doc_pagure.wsgi
 sed -i "s|#import|import|" $PAG_HOME/doc_pagure.wsgi
 sed -i "s|#sys.|sys.|" $PAG_HOME/doc_pagure.wsgi
-
+##Setup Apache & SSL (if requierements on place)
 if [ ! -z "$APP_URL" ] && [ ! -z "$DOC_APP_URL" ]; then
 echo -e "\nDo you want to setup apache config? (yes|no)"
 	while [[ $a2domain != yes && $a2domain != no ]]
@@ -356,6 +359,7 @@ cat  << CELERY >> $INIT_FILE
 Description=$PAG_USER Server
 Requires=postgresql.service
 After=postgresql.service redis.service
+Documentation=https://pagure.io/pagure
 [Service]
 Type=simple
 PermissionsStartOnly=true
@@ -366,7 +370,7 @@ SyslogIdentifier=$PAG_USER
 PIDFile=/run/$PAG_USER/$PAG_USER.pid
 ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
 ExecStart=$PAG_HOME_EXT/venv/bin/celery worker -A pagure.lib.tasks_services --loglevel=info
-Environment="PAGURE_CONFIG=$PAGURE_CONFIG"
+Environment="PAGURE_CONFIG=$PAG_CFG_FILE"
 ExecStop=/bin/kill -s TERM \$MAINPID
 [Install]
 WantedBy=multi-user.target

@@ -102,6 +102,9 @@ LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
 DIST=$(lsb_release -sc)
+if [ $DIST = flidas ]; then
+DIST="xenial"
+fi
 set_ssl_apache() {
 SSL_UP=$(grep -n $1 $2 | cut -d ':' -f1)
 SSL_DWN=$((SSL_UP + 12))
@@ -250,7 +253,7 @@ fi
 done
 
 echo -e "\nDo you want to configure your domain?* (yes|no):"
-echo -e "\n*(Configured domain is required for SSL setup)"
+echo "*(Configured domain is required for SSL setup)"
 while [[ $setdomain != yes && $setdomain != no ]]
 do
 	read setdomain
@@ -346,10 +349,10 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			service apache2 stop
 			letsencrypt certonly --standalone --renew-by-default --agree-tos --email $ADMIN_MAIL -d $APP_URL
 			letsencrypt certonly --standalone --renew-by-default --agree-tos --email $ADMIN_MAIL -d $DOC_APP_URL
-			service apache2 restart
 			set_ssl_apache "$PAG_HOME/pagure.wsgi" $AP2CONF $APP_URL
 			set_ssl_apache "$PAG_HOME/doc_pagure.wsgi" $AP2CONF $DOC_APP_URL
 			a2ensite $APP_URL.conf
+			service apache2 restart
 		fi
 	done
 fi
@@ -379,4 +382,4 @@ CELERY
 systemctl enable $INIT_FILE
 systemctl start ${PAG_USER}_worker.service
 
-echo "Check your browser at: http://$APP_URL
+echo "Check your browser at: http://$APP_URL"

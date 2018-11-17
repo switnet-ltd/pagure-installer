@@ -31,7 +31,7 @@ echo "gitolite3 gitolite3/adminkey string " | debconf-set-selections
 apt -yqq install gitolite3
 
 install_ifnot() {
-if [ "$(dpkg-query -W -f='${Status}' $1 2>/dev/null | grep -c "ok")" == "1" ]; then
+if [ "$(dpkg-query -W -f='${Status}' $1 2>/dev/null | grep -c "ok installed")" == "1" ]; then
 	echo " $1 is installed, skipping..."
     else
     	echo -e "\n---- Installing $1 ----"
@@ -80,16 +80,7 @@ else
 	echo "Please enter a small sufix for this instance."
 fi
 done
-#Select port and show used by installation.
-#PAG_PORTS_TAKEN=$(grep 0.0.0.0 /lib/systemd/system/pag*.service | cut -d "'" -f1 | awk 'NF>1{print $NF}' | cut -d ":" -f2 | sort -r)
-#echo "Choose the port: 5000-5999, the following ports are already taken:"
-#echo "Enter port:"
-#if [[ -z "$PAG_PORTS_TAKEN" ]]; then
-#	echo " -> Seems there is no other instance present."
-#else
-#	echo $PAG_PORTS_TAKEN
-#fi
-#read PAG_PORT
+
 PAG_USER="pag_$sufix"
 PAG_PDB="${PAG_USER}_db"
 SHUF=$(shuf -i 15-19 -n 1)
@@ -97,7 +88,8 @@ PDB_PASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
 PAG_HOME="/opt/$PAG_USER"
 PAG_HOME_EXT="$PAG_HOME/$PAG_USER-server"
 PAG_CFG_FILE="$PAG_HOME/pagure.cfg"
-INIT_FILE=/lib/systemd/system/$PAG_USER-worker.service
+PAG_WRK_SRV=/lib/systemd/system/${PAG_USER}-worker.service
+PAG_GIT_WRK=/lib/systemd/system/${PAG_USER}_gitolite_worker.service
 LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
@@ -357,12 +349,13 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 	done
 fi
 
-cat  << CELERY >> $INIT_FILE
+cat  << CELERY >> $PAG_WRK_SRV
 [Unit]
 Description=$PAG_USER Server
 Requires=postgresql.service
 After=postgresql.service redis.service
 Documentation=https://pagure.io/pagure
+
 [Service]
 Type=simple
 PermissionsStartOnly=true
@@ -375,11 +368,23 @@ ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
 ExecStart=$PAG_HOME_EXT/venv/bin/celery worker -A pagure.lib.tasks_services --loglevel=info
 Environment="PAGURE_CONFIG=$PAG_CFG_FILE"
 ExecStop=/bin/kill -s TERM \$MAINPID
+
 [Install]
 WantedBy=multi-user.target
 Alias=${PAG_USER}_worker.service
 CELERY
-systemctl enable $INIT_FILE
+systemctl enable $PAG_WRK_SRV
 systemctl start ${PAG_USER}_worker.service
+
+#Set gitolite worker
+cp $PAG_HOME_EXT/files/pagure_gitolite_worker.service $PAG_GIT_WRK
+SRV_GW=$(grep -n "\[Service\]" $PAG_GIT_WRK  | cut -d ":" -f1)
+WKD_LIN=$((SRV_GW + 1))
+sed -i "${WKD_LIN}i WorkingDirectory=$PAG_HOME_EXT" $PAG_GIT_WRK
+sed -i "s|/usr/bin/celery|$PAG_HOME_EXT/venv/bin/celery|" $PAG_GIT_WRK
+sed -i "s|=git|=$PAG_USER|" $PAG_GIT_WRK
+sed -i "s|=/etc/pagure/pagure.cfg|=$PAG_CFG_FILE|" $PAG_GIT_WRK
+systemctl enable $PAG_GIT_WRK
+systemctl start ${PAG_USER}_gitolite_worker.service
 
 echo "Check your browser at: http://$APP_URL"

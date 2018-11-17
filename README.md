@@ -1,4 +1,4 @@
-# Pagure Installer - Beta
+# Pagure Installer - Beta - gunicorn flavor
 Bash installer for Pagure on *buntu 16.04 LTS based systems such as Trisquel 8.
 
 **Please note that this is a work in progress, not production ready**

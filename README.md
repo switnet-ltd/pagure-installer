@@ -1,4 +1,4 @@
-# Pagure Installer - Beta
+# Pagure Installer - Beta - Celery
 Bash installer for Pagure on *buntu 16.04 LTS based systems such as Trisquel 8.
 
 **Please note that this is a work in progress, not production ready**
@@ -6,13 +6,13 @@ Bash installer for Pagure on *buntu 16.04 LTS based systems such as Trisquel 8.
 ## Features
 * Support several instances at once by using a sufix
 * Custom redis by instance by [mured.sh](https://github.com/switnet-ltd/mured)
-* systemd supervised service
-* more TBD
+    * Custom redis db for celery
+* systemd pagure worker
+* systemd gitolite worker
+* apache/letsencrypt self configuration
 
 ## To Be Determined
-* gitolite
-* set workers
-* determine feasibility of automatic apache2 configuration
+* set/fix workers configuration
 * more TBD
 
 ## Requirements

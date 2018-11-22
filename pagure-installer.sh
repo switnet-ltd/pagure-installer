@@ -29,7 +29,7 @@ apt -yqq install \
 
 echo "gitolite3 gitolite3/adminkey string " | debconf-set-selections
 apt -yqq install gitolite3
-
+PGSV=$(apt-cache madison postgresql | awk '{print $3}' | head -n1 | cut -d "+" -f1)
 install_ifnot() {
 if [ "$(dpkg-query -W -f='${Status}' $1 2>/dev/null | grep -c "ok installed")" == "1" ]; then
 	echo " $1 is installed, skipping..."
@@ -45,14 +45,16 @@ else
 	sed -i "$(grep -n $1 $2 | head -n 1 | cut -d ":" -f1) s|$3|$4|" $2
 fi
 }
-
+first_nline_patter() {
+grep -n $1 $2 | cut -d ":" -f1 | head -n1
+}
 #--------------------------------------------------
 # Install PostgreSQL Server
 #--------------------------------------------------
 install_ifnot language-pack-en-base
-install_ifnot postgresql-9.5
+install_ifnot postgresql-$PGSV
 echo -e "\n---- PostgreSQL Settings  ----"
-sed -i "s|#listen_addresses = 'localhost'|listen_addresses = '*'|g" /etc/postgresql/9.5/main/postgresql.conf
+sed -i "s|#listen_addresses = 'localhost'|listen_addresses = '*'|g" /etc/postgresql/$PGSV/main/postgresql.conf
 
 echo "
 Please select the suffix for this pagure instance.
@@ -96,6 +98,9 @@ CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{p
 DIST=$(lsb_release -sc)
 if [ $DIST = flidas ]; then
 DIST="xenial"
+fi
+if [ $DIST = bionic ]; then
+add-apt-repository universe
 fi
 set_ssl_apache() {
 SSL_UP=$(grep -n $1 $2 | cut -d ':' -f1)
@@ -154,10 +159,10 @@ cd $PAG_HOME_EXT
 sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 celery pygit2==0.24"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 celery pygit2==0.26.4"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
-sudo su $PAG_USER -c "mkdir $PAG_HOME/{repos,docs,forks,tickets,requests,remotes,releases}"
+sudo su $PAG_USER -c "mkdir $PAG_HOME/{repos,pseudo,remotes,docs,forks,tickets,requests,releases,attachments}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 #Add empty gitolite
 sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
@@ -295,9 +300,20 @@ BRK_DBN=$((RED_DBN + 1))
 sed -i "${BRK_INS}i BROKER_URL = \'redis://localhost:$REDIS_PORT/$BRK_DBN\'" $PAG_CFG_FILE
 usermod -aG redis $PAG_USER
 
+#GITOLITE
+##pagure.cfg
+#Set fixed python path
+sed -i "$(first_nline_patter GIT_FOLDER $PAG_CFG_FILE),$(first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE) {/'..',/ d}" $PAG_CFG_FILE
+sed -i "$(first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE),$(first_nline_patter gitolite.conf $PAG_CFG_FILE) s|\.\.|.gitolite/conf/|" $PAG_CFG_FILE
+sed -i "s|.*GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir/\'|" $PAG_CFG_FILE
+sed -i "s|.*GL_RC.*|GL_RC = \'$PAG_HOME/.gitolite.rc'|" $PAG_CFG_FILE
+##gitolite.rc
+$PAG_HOME/.gitolite.rc 
+sed -i "s|/path/to/git/repositories|$PAG_HOME/repos|" $PAG_HOME/.gitolite.rc
+
 #Create the inital database scheme
 sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME/alembic.ini
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python $PAG_HOME_EXT/createdb.py -i $PAG_HOME/alembic.ini -c $PAG_CFG_FILE"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/python3 $PAG_HOME_EXT/createdb.py -i $PAG_HOME/alembic.ini -c $PAG_CFG_FILE"
 
 ## Setup WSGI
 sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_HOME/pagure.wsgi
@@ -387,4 +403,5 @@ sed -i "s|=/etc/pagure/pagure.cfg|=$PAG_CFG_FILE|" $PAG_GIT_WRK
 systemctl enable $PAG_GIT_WRK
 systemctl start ${PAG_USER}_gitolite_worker.service
 
-echo "Check your browser at: http://$APP_URL"
+echo "
+Check your browser at: http://$APP_URL"

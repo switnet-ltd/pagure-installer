@@ -314,15 +314,16 @@ usermod -aG redis $PAG_USER
 sed -i "s|git@|${PAG_USER}@|" $PAG_CFG_FILE
 sed -i "s|git://|${PAG_USER}://|" $PAG_CFG_FILE
 sed -i "/os.path.abspath/{N;N;N;/)/d;p}" $PAG_CFG_FILE
-sed -i "s|.*GIT_FOLDER =.*|GIT_FOLDER = \'$PAG_HOME/repositories'|" $PAG_CFG_FILE
-sed -i "s|.*REMOTE_GIT_FOLDER.*|REMOTE_GIT_FOLDER = \'$PAG_HOME/remotes'|" $PAG_CFG_FILE
-sed -i "s|.*GITOLITE_CONFIG.*|GITOLITE_CONFIG = \'$PAG_HOME/.gitolite/conf/gitolite.conf'|" $PAG_CFG_FILE
-sed -i "s|.*GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir'|" $PAG_CFG_FILE
-sed -i "s|.*GL_RC.*|GL_RC = \'$PAG_HOME/.gitolite.rc'|" $PAG_CFG_FILE
-sed -i "s|.*GL_RC.*|GL_BINDIR = '/usr/bin'|" $PAG_CFG_FILE
+sed -i "s|GIT_FOLDER =.*|GIT_FOLDER = \'$PAG_HOME/repositories'|" $PAG_CFG_FILE
+sed -i "s|REMOTE_GIT_FOLDER =.*|REMOTE_GIT_FOLDER = \'$PAG_HOME/remotes'|" $PAG_CFG_FILE
+sed -i "s|GITOLITE_CONFIG.*|GITOLITE_CONFIG = \'$PAG_HOME/.gitolite/conf/gitolite.conf'|" $PAG_CFG_FILE
+sed -i "s|GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir'|" $PAG_CFG_FILE
+sed -i "s|GL_RC.*|GL_RC = \'$PAG_HOME/.gitolite.rc'|" $PAG_CFG_FILE
+sed -i "s|GL_BINDIR.*|GL_BINDIR = '/usr/bin'|" $PAG_CFG_FILE
 GIT_AUTH_INS=$(($( first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE ) + 1))
 sed -i "${GIT_AUTH_INS}i GIT_AUTH_BACKEND = 'gitolite3'" $PAG_CFG_FILE
-sed -i "s|.*GITOLITE_VERSION.*|GITOLITE_VERSION = 3|" $PAG_CFG_FILE
+sed -i "s|GITOLITE_VERSION.*|GITOLITE_VERSION = 3|" $PAG_CFG_FILE
+sed -i "s|os.path.join(|None|" $PAG_CFG_FILE
 ##gitolite.rc
 $PAG_HOME/.gitolite.rc 
 sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $PAG_HOME/.gitolite.rc

@@ -96,8 +96,15 @@ LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
 DIST=$(lsb_release -sc)
-if [ $DIST = flidas ]; then
+if [ $DIST = flidas ] || [ $DIST = xenial ]; then
 DIST="xenial"
+#Tmp fix for getting backported libraries
+wget \
+https://ark.switnet.org/tmp/libgit2/libgit2-26_0.26.0+dfsg.1-1.1ubuntu0.2_amd64.deb \
+https://ark.switnet.org/tmp/libgit2/libgit2-dev_0.26.0+dfsg.1-1.1ubuntu0.2_amd64.deb
+dpkg -i libgit2*.deb
+apt install -fy
+rm -rf libgit2*.deb
 fi
 if [ $DIST = bionic ]; then
 add-apt-repository universe
@@ -162,7 +169,8 @@ sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 celery pygit2==0.26.4"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
-sudo su $PAG_USER -c "mkdir $PAG_HOME/{repos,pseudo,remotes,docs,forks,tickets,requests,releases,attachments}"
+sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"
+sudo su $PAG_USER -c "mkdir -p $PAG_HOME/remotes"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 #Add empty gitolite
 sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
@@ -179,11 +187,11 @@ sed -i "s|.*SECRET_KEY.*|SECRET_KEY=\'$SKEY\'|" $PAG_CFG_FILE
 sed -i "s|.*SALT_EMAIL.*|SALT_EMAIL=\'$SMAIL\'|" $PAG_CFG_FILE
 # DATA BASE
 sed -i "s|DB_URL = 'sqlite|#DB_URL = 'sqlite|" $PAG_CFG_FILE
-sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|#DB_URL|DB_URL|" $PAG_CFG_FILE
-sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|user|$PAG_USER|" $PAG_CFG_FILE
-sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|pass|$PDB_PASS|" $PAG_CFG_FILE
-sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|host|localhost|" $PAG_CFG_FILE
-sed -i "$(grep -n "postgres://" $PAG_CFG_FILE | head -n1 | cut -d ":" -f1) s|db_name|$PAG_PDB|" $PAG_CFG_FILE
+sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|#DB_URL|DB_URL|" $PAG_CFG_FILE
+sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|user|$PAG_USER|" $PAG_CFG_FILE
+sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|pass|$PDB_PASS|" $PAG_CFG_FILE
+sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|host|localhost|" $PAG_CFG_FILE
+sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|db_name|$PAG_PDB|" $PAG_CFG_FILE
 
 #Enable and setup email
 echo -e "\nDo you want to enable and configure email sending? (yes|no):"
@@ -303,13 +311,21 @@ usermod -aG redis $PAG_USER
 #GITOLITE
 ##pagure.cfg
 #Set fixed python path
-sed -i "$(first_nline_patter GIT_FOLDER $PAG_CFG_FILE),$(first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE) {/'..',/ d}" $PAG_CFG_FILE
-sed -i "$(first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE),$(first_nline_patter gitolite.conf $PAG_CFG_FILE) s|\.\.|.gitolite/conf/|" $PAG_CFG_FILE
-sed -i "s|.*GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir/\'|" $PAG_CFG_FILE
+sed -i "s|git@|${PAG_USER}@|" $PAG_CFG_FILE
+sed -i "s|git://|${PAG_USER}://|" $PAG_CFG_FILE
+sed -i "/os.path.abspath/{N;N;N;/)/d;p}" $PAG_CFG_FILE
+sed -i "s|.*GIT_FOLDER =.*|GIT_FOLDER = \'$PAG_HOME/repositories'|" $PAG_CFG_FILE
+sed -i "s|.*REMOTE_GIT_FOLDER.*|REMOTE_GIT_FOLDER = \'$PAG_HOME/remotes'|" $PAG_CFG_FILE
+sed -i "s|.*GITOLITE_CONFIG.*|GITOLITE_CONFIG = \'$PAG_HOME/.gitolite/conf/gitolite.conf'|" $PAG_CFG_FILE
+sed -i "s|.*GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir'|" $PAG_CFG_FILE
 sed -i "s|.*GL_RC.*|GL_RC = \'$PAG_HOME/.gitolite.rc'|" $PAG_CFG_FILE
+sed -i "s|.*GL_RC.*|GL_BINDIR = '/usr/bin'|" $PAG_CFG_FILE
+GIT_AUTH_INS=$(($( first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE ) + 1))
+sed -i "${GIT_AUTH_INS}i GIT_AUTH_BACKEND = 'gitolite3'" $PAG_CFG_FILE
+sed -i "s|.*GITOLITE_VERSION.*|GITOLITE_VERSION = 3|" $PAG_CFG_FILE
 ##gitolite.rc
 $PAG_HOME/.gitolite.rc 
-sed -i "s|/path/to/git/repositories|$PAG_HOME/repos|" $PAG_HOME/.gitolite.rc
+sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $PAG_HOME/.gitolite.rc
 
 #Create the inital database scheme
 sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME/alembic.ini
@@ -350,7 +366,7 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			sed -i "s|/usr/share/pagure/doc_pagure.wsgi|$PAG_HOME/doc_pagure.wsgi|" $AP2CONF
 			sed -i "s|/usr/lib/pythonX.Y/site-packages/pagure/static/|$PAG_HOME_EXT/pagure/static/|" $AP2CONF
 			sed -i "s|/var/www/releases|$PAG_HOME/releases|" $AP2CONF
-			sed -i "s|/path/to/git/repositories|$PAG_HOME/repos|" $AP2CONF
+			sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $AP2CONF
 			sed -i "s|#||" $AP2CONF
 			sed -i "s|SSLCertificate|#SSLCertificate|" /etc/apache2/sites-available/$APP_URL.conf
 			# Get ssl cert for domain using letsencrypt
@@ -360,6 +376,10 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			set_ssl_apache "$PAG_HOME/pagure.wsgi" $AP2CONF $APP_URL
 			set_ssl_apache "$PAG_HOME/doc_pagure.wsgi" $AP2CONF $DOC_APP_URL
 			a2ensite $APP_URL.conf
+			#TuneUp site performance
+			sed -i "s|.*SESSION_COOKIE_SECURE.*|SESSION_COOKIE_SECURE = True|" $PAG_CFG_FILE
+			sed -i "s|.*WEBHOOK.*|WEBHOOK = True|" $PAG_CFG_FILE
+			sed -i "s|.*EVENTSOURCE_SOURCE = None.*|EVENTSOURCE_SOURCE = \'https://${APP_URL}\'|" $PAG_CFG_FILE
 			service apache2 restart
 		fi
 	done
@@ -382,6 +402,7 @@ SyslogIdentifier=$PAG_USER
 PIDFile=/run/$PAG_USER/$PAG_USER.pid
 ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
 ExecStart=$PAG_HOME_EXT/venv/bin/celery worker -A pagure.lib.tasks_services --loglevel=info
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PAG_HOME_EXT/venv/bin"
 Environment="PAGURE_CONFIG=$PAG_CFG_FILE"
 ExecStop=/bin/kill -s TERM \$MAINPID
 
@@ -400,6 +421,7 @@ sed -i "${WKD_LIN}i WorkingDirectory=$PAG_HOME_EXT" $PAG_GIT_WRK
 sed -i "s|/usr/bin/celery|$PAG_HOME_EXT/venv/bin/celery|" $PAG_GIT_WRK
 sed -i "s|=git|=$PAG_USER|" $PAG_GIT_WRK
 sed -i "s|=/etc/pagure/pagure.cfg|=$PAG_CFG_FILE|" $PAG_GIT_WRK
+sed -i "$(first_nline_patter Environment $PAG_GIT_WRK)i Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PAG_HOME_EXT/venv/bin\"" $PAG_GIT_WRK
 systemctl enable $PAG_GIT_WRK
 systemctl start ${PAG_USER}_gitolite_worker.service
 

@@ -90,6 +90,7 @@ PDB_PASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
 PAG_HOME="/opt/$PAG_USER"
 PAG_HOME_EXT="$PAG_HOME/$PAG_USER-server"
 PAG_CFG_FILE="$PAG_HOME/pagure.cfg"
+HOOK_RUNR="$PAG_HOME_EXT/pagure/hooks/files/hookrunner"
 PAG_WRK_SRV=/lib/systemd/system/${PAG_USER}-worker.service
 PAG_GIT_WRK=/lib/systemd/system/${PAG_USER}_gitolite_worker.service
 LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
@@ -160,6 +161,9 @@ chown $PAG_USER:$PAG_USER $PAG_HOME/log/
 #Retrieve the sources
 cd $PAG_HOME
 sudo su $PAG_USER -c "git clone --depth 1 https://pagure.io/pagure.git $PAG_HOME_EXT/"
+sed -i "s|.*sys.path.insert.*|sys.path.insert(0, \'$PAG_HOME_EXT\')|" $HOOK_RUNR
+VENV_HOOK=$(($( first_nline_patter sys.path.insert $HOOK_RUNR ) + 1))
+sed -i "${VENV_HOOK}i #sys.path.insert(0, \'$PAG_HOME_EXT/venv/lib/python3.5/site-packages\')" $HOOK_RUNR
 #Apache copy
 echo -e "\n---- Installing python (pip) dependacies for pagure ----"
 cd $PAG_HOME_EXT
@@ -167,6 +171,7 @@ sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 celery pygit2==0.26.4"
+#sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install backports.functools_lru_cache"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"
@@ -327,6 +332,11 @@ sed -i "s|os.path.join(|None|" $PAG_CFG_FILE
 ##gitolite.rc
 $PAG_HOME/.gitolite.rc 
 sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $PAG_HOME/.gitolite.rc
+#Set Gitolite-SSH
+sudo su $PAG_USER -c "ssh-keygen -t rsa -b 4096"
+sudo su $PAG_USER -c "touch $PAG_HOME/.ssh/authorized_keys"
+sudo su $PAG_USER -c "gitolite compile"
+sudo su $PAG_USER -c "gitolite trigger POST_COMPILE"
 
 #Create the inital database scheme
 sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME/alembic.ini

@@ -162,7 +162,7 @@ chown $PAG_USER:$PAG_USER $PAG_HOME/log/
 cd $PAG_HOME
 sudo su $PAG_USER -c "git clone --depth 1 https://pagure.io/pagure.git $PAG_HOME_EXT/"
 sed -i "s|.*sys.path.insert.*|sys.path.insert(0, \'$PAG_HOME_EXT\')|" $HOOK_RUNR
-VENV_HOOK=$(($( first_nline_patter sys.path.insert $HOOK_RUNR ) + 1))
+#VENV_HOOK=$(($( first_nline_patter sys.path.insert $HOOK_RUNR ) + 1))
 #sed -i "${VENV_HOOK}i #sys.path.insert(0, \'$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages\')" $HOOK_RUNR
 #Apache copy
 echo -e "\n---- Installing python (pip) dependacies for pagure ----"
@@ -190,13 +190,12 @@ sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/aclchecker.py $PAG_HOME/aclchecker.
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/keyhelper.py $PAG_HOME/keyhelper.py"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/api_key_expire_mail.py $PAG_HOME/api_key_expire_mail.py"
 #Fix shebang for several scripts (pagure.spec)
-sed -e "s|#\!/usr/bin/env python|\#!${$PAG_HOME_EXT}/venv/bin/python3|" -i \
+sed -e "s|#\!/usr/bin/env python|#\!${PAG_HOME_EXT}/venv/bin/python3|" -i \
     $PAG_HOME/aclchecker.py \
     $PAG_HOME/keyhelper.py \
     $PAG_HOME/api_key_expire_mail.py \
     $PAG_HOME_EXT/pagure/hooks/files/*.py \
-    $PAG_HOME_EXT/pagure/hooks/files/post-receive \
-    $PAG_HOME_EXT/pagure/hooks/files/pre-receive \
+    $HOOK_RUNR \
     $PAG_HOME_EXT/pagure/hooks/files/repospannerhook
 #ToDo - Check usage
 #sed -e "s|#!/usr/bin/env python|#!%{__python}|" -i \
@@ -455,6 +454,10 @@ Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:
 Environment=\"PYTHONPATH=$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages\"" $PAG_GIT_WRK
 systemctl enable $PAG_GIT_WRK
 systemctl start ${PAG_USER}_gitolite_worker.service
+
+#Clean unused packages
+apt -y autoremove
+apt autoclean
 
 echo "
 Check your browser at: http://$APP_URL"

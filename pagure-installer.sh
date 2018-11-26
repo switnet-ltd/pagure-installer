@@ -2,11 +2,14 @@
 # Pagure (multi) installer - *buntu 16.04 based.
 # SwITNet Ltd © - 2018, https://switnet.net/
 # GPLv3 or later.
-
+DIST=$(lsb_release -sc)
 #Check if user is root
 if ! [ $(id -u) = 0 ]; then
    echo "You need to be root or have sudo privileges!"
    exit 1
+fi
+if [ $DIST = bionic ]; then
+add-apt-repository universe
 fi
 echo "#--------------------------------------------------
 # Checking and installing system dependancies...
@@ -96,7 +99,6 @@ PAG_GIT_WRK=/lib/systemd/system/${PAG_USER}_gitolite_worker.service
 LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
-DIST=$(lsb_release -sc)
 if [ $DIST = flidas ] || [ $DIST = xenial ]; then
 DIST="xenial"
 #Tmp fix for getting backported libraries
@@ -106,9 +108,6 @@ https://ark.switnet.org/tmp/libgit2/libgit2-dev_0.26.0+dfsg.1-1.1ubuntu0.2_amd64
 dpkg -i libgit2*.deb
 apt install -fy
 rm -rf libgit2*.deb
-fi
-if [ $DIST = bionic ]; then
-add-apt-repository universe
 fi
 set_ssl_apache() {
 SSL_UP=$(grep -n $1 $2 | cut -d ':' -f1)
@@ -263,7 +262,7 @@ fi
 done
 
 echo -e "\nDo you want to configure your domain?* (yes|no):"
-echo "*(Configured domain is required for SSL setup)"
+echo "*(Required for SSL setup)"
 while [[ $setdomain != yes && $setdomain != no ]]
 do
 	read setdomain
@@ -324,6 +323,7 @@ sed -i "s|REMOTE_GIT_FOLDER =.*|REMOTE_GIT_FOLDER = \'$PAG_HOME/remotes'|" $PAG_
 sed -i "s|GITOLITE_CONFIG.*|GITOLITE_CONFIG = \'$PAG_HOME/.gitolite/conf/gitolite.conf'|" $PAG_CFG_FILE
 sed -i "s|GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir'|" $PAG_CFG_FILE
 sed -i "s|GL_RC.*|GL_RC = \'$PAG_HOME/.gitolite.rc'|" $PAG_CFG_FILE
+sed -i "s|GITOLITE_HOME.*|GITOLITE_HOME = \'$PAG_HOME/.gitolite'|" $PAG_CFG_FILE
 sed -i "s|GL_BINDIR.*|GL_BINDIR = '/usr/bin'|" $PAG_CFG_FILE
 GIT_AUTH_INS=$(($( first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE ) + 1))
 sed -i "${GIT_AUTH_INS}i GIT_AUTH_BACKEND = 'gitolite3'" $PAG_CFG_FILE

@@ -32,7 +32,8 @@ apt -yqq install \
 
 echo "gitolite3 gitolite3/adminkey string " | debconf-set-selections
 apt -yqq install gitolite3
-PGSV=$(apt-cache madison postgresql | awk '{print $3}' | head -n1 | cut -d "+" -f1)
+PGSV=$(apt-cache madison postgresql | head -n1 | awk '{print $3}' | cut -d "+" -f1)
+PYT_V=$(apt-cache madison python3 | head -n1 | awk '{print $3}' | cut -d "." -f1,2)
 install_ifnot() {
 if [ "$(dpkg-query -W -f='${Status}' $1 2>/dev/null | grep -c "ok installed")" == "1" ]; then
 	echo " $1 is installed, skipping..."
@@ -162,7 +163,7 @@ cd $PAG_HOME
 sudo su $PAG_USER -c "git clone --depth 1 https://pagure.io/pagure.git $PAG_HOME_EXT/"
 sed -i "s|.*sys.path.insert.*|sys.path.insert(0, \'$PAG_HOME_EXT\')|" $HOOK_RUNR
 VENV_HOOK=$(($( first_nline_patter sys.path.insert $HOOK_RUNR ) + 1))
-sed -i "${VENV_HOOK}i #sys.path.insert(0, \'$PAG_HOME_EXT/venv/lib/python3.5/site-packages\')" $HOOK_RUNR
+#sed -i "${VENV_HOOK}i #sys.path.insert(0, \'$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages\')" $HOOK_RUNR
 #Apache copy
 echo -e "\n---- Installing python (pip) dependacies for pagure ----"
 cd $PAG_HOME_EXT
@@ -184,6 +185,23 @@ sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.cfg.sample $PAG_CFG_FILE"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/alembic.ini $PAG_HOME/alembic.ini"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.wsgi $PAG_HOME/pagure.wsgi"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/doc_pagure.wsgi $PAG_HOME/doc_pagure.wsgi"
+#ToDo - Check usage
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/aclchecker.py $PAG_HOME/aclchecker.py"
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/keyhelper.py $PAG_HOME/keyhelper.py"
+sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/api_key_expire_mail.py $PAG_HOME/api_key_expire_mail.py"
+#Fix shebang for several scripts (pagure.spec)
+sed -e "s|#\!/usr/bin/env python|\#!${$PAG_HOME_EXT}/venv/bin/python3|" -i \
+    $PAG_HOME/aclchecker.py \
+    $PAG_HOME/keyhelper.py \
+    $PAG_HOME/api_key_expire_mail.py \
+    $PAG_HOME_EXT/pagure/hooks/files/*.py \
+    $PAG_HOME_EXT/pagure/hooks/files/post-receive \
+    $PAG_HOME_EXT/pagure/hooks/files/pre-receive \
+    $PAG_HOME_EXT/pagure/hooks/files/repospannerhook
+#ToDo - Check usage
+#sed -e "s|#!/usr/bin/env python|#!%{__python}|" -i \
+#    $PAG_HOME_EXT/pagure-milters/comment_email_milter.py \
+#    $PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
 
 SKEY=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 SMAIL=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
@@ -322,21 +340,20 @@ sed -i "s|GIT_FOLDER =.*|GIT_FOLDER = \'$PAG_HOME/repositories'|" $PAG_CFG_FILE
 sed -i "s|REMOTE_GIT_FOLDER =.*|REMOTE_GIT_FOLDER = \'$PAG_HOME/remotes'|" $PAG_CFG_FILE
 sed -i "s|GITOLITE_CONFIG.*|GITOLITE_CONFIG = \'$PAG_HOME/.gitolite/conf/gitolite.conf'|" $PAG_CFG_FILE
 sed -i "s|GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir'|" $PAG_CFG_FILE
-sed -i "s|GL_RC.*|GL_RC = \'$PAG_HOME/.gitolite.rc'|" $PAG_CFG_FILE
-sed -i "s|GITOLITE_HOME.*|GITOLITE_HOME = \'$PAG_HOME/.gitolite'|" $PAG_CFG_FILE
-sed -i "s|GL_BINDIR.*|GL_BINDIR = '/usr/bin'|" $PAG_CFG_FILE
+sed -i "s|GITOLITE_HOME.*|GITOLITE_HOME = \'$PAG_HOME'|" $PAG_CFG_FILE
 GIT_AUTH_INS=$(($( first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE ) + 1))
 sed -i "${GIT_AUTH_INS}i GIT_AUTH_BACKEND = 'gitolite3'" $PAG_CFG_FILE
 sed -i "s|GITOLITE_VERSION.*|GITOLITE_VERSION = 3|" $PAG_CFG_FILE
 sed -i "s|os.path.join(|None|" $PAG_CFG_FILE
+#GL_BINDIR - GITOLITEv2 only
+sed -i "s|GL_BINDIR.*|#GL_BINDIR = None|" $PAG_CFG_FILE
 ##gitolite.rc
-$PAG_HOME/.gitolite.rc 
+#GL_RC - GITOLITEv2 only
+sed -i "s|GL_RC.*|#GL_RC = None|" $PAG_CFG_FILE
 sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $PAG_HOME/.gitolite.rc
-#Set Gitolite-SSH
+#Set server ssh key.
 sudo su $PAG_USER -c "ssh-keygen -t rsa -b 4096"
 sudo su $PAG_USER -c "touch $PAG_HOME/.ssh/authorized_keys"
-sudo su $PAG_USER -c "gitolite compile"
-sudo su $PAG_USER -c "gitolite trigger POST_COMPILE"
 
 #Create the inital database scheme
 sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_HOME/alembic.ini
@@ -414,6 +431,7 @@ PIDFile=/run/$PAG_USER/$PAG_USER.pid
 ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
 ExecStart=$PAG_HOME_EXT/venv/bin/celery worker -A pagure.lib.tasks_services --loglevel=info
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PAG_HOME_EXT/venv/bin"
+Environment="PYTHONPATH=$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages"
 Environment="PAGURE_CONFIG=$PAG_CFG_FILE"
 ExecStop=/bin/kill -s TERM \$MAINPID
 
@@ -432,7 +450,9 @@ sed -i "${WKD_LIN}i WorkingDirectory=$PAG_HOME_EXT" $PAG_GIT_WRK
 sed -i "s|/usr/bin/celery|$PAG_HOME_EXT/venv/bin/celery|" $PAG_GIT_WRK
 sed -i "s|=git|=$PAG_USER|" $PAG_GIT_WRK
 sed -i "s|=/etc/pagure/pagure.cfg|=$PAG_CFG_FILE|" $PAG_GIT_WRK
-sed -i "$(first_nline_patter Environment $PAG_GIT_WRK)i Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PAG_HOME_EXT/venv/bin\"" $PAG_GIT_WRK
+sed -i "$(first_nline_patter Environment $PAG_GIT_WRK)i \
+Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PAG_HOME_EXT/venv/bin\"
+Environment=\"PYTHONPATH=$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages\"" $PAG_GIT_WRK
 systemctl enable $PAG_GIT_WRK
 systemctl start ${PAG_USER}_gitolite_worker.service
 

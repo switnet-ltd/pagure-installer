@@ -22,7 +22,8 @@ New support for ubuntu 18.04
 ## Requirements
 * *buntu 18.04 (new)
 * *buntu 16.04 / Trisquel 8
-    * requires backport libgit2 v0.26 
+    * requires backport libgit2 v0.26
+* At least 1 domain configured, in order to use ssl along with letsencrypt
 * more TBD
 
 

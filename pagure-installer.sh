@@ -175,7 +175,7 @@ sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 celery pygit2
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"
-sudo su $PAG_USER -c "mkdir -p $PAG_HOME/remotes"
+sudo su $PAG_USER -c "mkdir -p $PAG_HOME/{remotes,releases}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 #Add empty gitolite
 sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
@@ -402,6 +402,48 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			letsencrypt certonly --standalone --renew-by-default --agree-tos --email $ADMIN_MAIL -d $DOC_APP_URL
 			set_ssl_apache "$PAG_HOME/pagure.wsgi" $AP2CONF $APP_URL
 			set_ssl_apache "$PAG_HOME/doc_pagure.wsgi" $AP2CONF $DOC_APP_URL
+			a2ensite $APP_URL.conf
+			#TuneUp site performance
+			sed -i "s|.*SESSION_COOKIE_SECURE.*|SESSION_COOKIE_SECURE = True|" $PAG_CFG_FILE
+			sed -i "s|.*WEBHOOK.*|WEBHOOK = True|" $PAG_CFG_FILE
+			sed -i "s|.*EVENTSOURCE_SOURCE = None.*|EVENTSOURCE_SOURCE = \'https://${APP_URL}\'|" $PAG_CFG_FILE
+			service apache2 restart
+		fi
+	done
+fi
+if [ ! -z "$APP_URL" ] && [ -z "$DOC_APP_URL" ]; then
+echo -e "\nDo you want to setup apache config? (yes|no)"
+	while [[ $a2domain != yes && $a2domain != no ]]
+	do
+	read a2domain
+		if [ $a2domain = no ]; then
+			echo "If you change your mind, please configure it manually."
+		elif [ $a2domain = yes ]; then
+			echo "Let's get to it ..."
+			install_ifnot apache2
+			install_ifnot libapache2-mod-wsgi-py3
+			a2enmod ssl headers wsgi
+			update_certbot
+			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
+			AP2CONF="/etc/apache2/sites-available/$APP_URL.conf"
+			sed -i "s|run/wsgi|/var/run/wsgi|" $AP2CONF
+			sed -i "s|=git|=$PAG_USER|g" $AP2CONF
+			sed -i "/WSGIDaemonProcess/ s|display-name=pagure|display-name=$PAG_USER|" $AP2CONF
+			sed -i "/WSGIDaemonProcess/ s|$| python-home=$PAG_HOME_EXT/venv|" $AP2CONF
+			sed -i "s|localhost.localdomain|$APP_URL|" $AP2CONF
+			sed -i "s|/usr/share/pagure/pagure.wsgi|$PAG_HOME/pagure.wsgi|" $AP2CONF
+			sed -i "s|/usr/lib/pythonX.Y/site-packages/pagure/static/|$PAG_HOME_EXT/pagure/static/|" $AP2CONF
+			sed -i "s|/var/www/releases|$PAG_HOME/releases|" $AP2CONF
+			sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $AP2CONF
+			sed -i "s|#||" $AP2CONF
+			sed -i "s|SSLCertificate|#SSLCertificate|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i '/<VirtualHost/{:a;N;/\/VirtualHost>/!ba};'"/docs.${APP_URL}/"'d' $AP2CONF
+			sed -i "s|.*WSGIDaemonProcess paguredocs|#WSGIDaemonProcess paguredocs|" $AP2CONF
+			#sed -i "s|.*WSGIDaemonProcess paguredocs:*||" $AP2CONF #comment or delete?
+			# Get ssl cert for domain using letsencrypt
+			service apache2 stop
+			letsencrypt certonly --standalone --renew-by-default --agree-tos --email $ADMIN_MAIL -d $APP_URL
+			set_ssl_apache "$PAG_HOME/pagure.wsgi" $AP2CONF $APP_URL
 			a2ensite $APP_URL.conf
 			#TuneUp site performance
 			sed -i "s|.*SESSION_COOKIE_SECURE.*|SESSION_COOKIE_SECURE = True|" $PAG_CFG_FILE

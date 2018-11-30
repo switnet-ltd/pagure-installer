@@ -162,8 +162,6 @@ chown $PAG_USER:$PAG_USER $PAG_HOME/log/
 cd $PAG_HOME
 sudo su $PAG_USER -c "git clone --depth 1 https://pagure.io/pagure.git $PAG_HOME_EXT/"
 sed -i "s|.*sys.path.insert.*|sys.path.insert(0, \'$PAG_HOME_EXT\')|" $HOOK_RUNR
-#VENV_HOOK=$(($( first_nline_patter sys.path.insert $HOOK_RUNR ) + 1))
-#sed -i "${VENV_HOOK}i #sys.path.insert(0, \'$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages\')" $HOOK_RUNR
 #Apache copy
 echo -e "\n---- Installing python (pip) dependacies for pagure ----"
 cd $PAG_HOME_EXT
@@ -174,8 +172,8 @@ sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 celery pygit2
 #sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install backports.functools_lru_cache"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
-sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"
-sudo su $PAG_USER -c "mkdir -p $PAG_HOME/{remotes,releases}"
+sudo su $PAG_USER -c "mkdir -p $PAG_HOME/{repositories,attachments,remotes,releases}"
+#sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 #Add empty gitolite
 sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
@@ -336,6 +334,10 @@ sed -i "s|git@|${PAG_USER}@|" $PAG_CFG_FILE
 sed -i "s|git://|${PAG_USER}://|" $PAG_CFG_FILE
 sed -i "/os.path.abspath/{N;N;N;/)/d;p}" $PAG_CFG_FILE
 sed -i "s|GIT_FOLDER =.*|GIT_FOLDER = \'$PAG_HOME/repositories'|" $PAG_CFG_FILE
+GIT_FOLDER_INS=$(($( first_nline_patter GIT_FOLDER $PAG_CFG_FILE ) + 1))
+sed -i "${GIT_FOLDER_INS}i #DOCS_FOLDER = \'$PAG_HOME/repositories/docs\
+#TICKETS_FOLDER = \'$PAG_HOME/repositories/tickets\
+#REQUESTS_FOLDER = \'$PAG_HOME/repositories/requests"
 sed -i "s|REMOTE_GIT_FOLDER =.*|REMOTE_GIT_FOLDER = \'$PAG_HOME/remotes'|" $PAG_CFG_FILE
 sed -i "s|GITOLITE_CONFIG.*|GITOLITE_CONFIG = \'$PAG_HOME/.gitolite/conf/gitolite.conf'|" $PAG_CFG_FILE
 sed -i "s|GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir'|" $PAG_CFG_FILE

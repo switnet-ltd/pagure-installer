@@ -30,8 +30,15 @@ apt -yqq install \
 				python3-gdbm \
 				redis-server &>/dev/null
 
+#apt -yqq install gitolite3
+# gitolite > 3.6.4 < 3.7.10
+#https://pagure.io/pagure/issue/3971
+apt -yqq install \
+				git \
+				libjson-perl
+wget https://ark.switnet.org/tmp/gitolite3/gitolite3_3.6.7-2_all.deb
 echo "gitolite3 gitolite3/adminkey string " | debconf-set-selections
-apt -yqq install gitolite3
+dpkg -i gitolite3_3.6.7-2_all.deb
 PGSV=$(apt-cache madison postgresql | head -n1 | awk '{print $3}' | cut -d "+" -f1)
 PYT_V=$(apt-cache madison python3 | head -n1 | awk '{print $3}' | cut -d "." -f1,2)
 install_ifnot() {
@@ -100,14 +107,17 @@ PAG_GIT_WRK=/lib/systemd/system/${PAG_USER}_gitolite_worker.service
 LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
-if [ $DIST = flidas ] || [ $DIST = xenial ]; then
+if [ $DIST = flidas ]; then
 DIST="xenial"
+fi
+if [ $DIST = xenial ]; then
 #Tmp fix for getting backported libraries
 wget \
 https://ark.switnet.org/tmp/libgit2/libgit2-26_0.26.0+dfsg.1-1.1ubuntu0.2_amd64.deb \
 https://ark.switnet.org/tmp/libgit2/libgit2-dev_0.26.0+dfsg.1-1.1ubuntu0.2_amd64.deb
 dpkg -i libgit2*.deb
 apt install -fy
+apt -y autoremove
 rm -rf libgit2*.deb
 fi
 set_ssl_apache() {
@@ -168,12 +178,11 @@ cd $PAG_HOME_EXT
 sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 celery pygit2==0.26.4"
-#sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install backports.functools_lru_cache"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 idna==2.7 pygit2==0.26.4"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/{repositories,attachments,remotes,releases}"
-#sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"
+sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 #Add empty gitolite
 sudo su $PAG_USER -c "touch $PAG_HOME/.gitolite/conf/gitolite.conf"
@@ -337,14 +346,14 @@ sed -i "s|GIT_FOLDER =.*|GIT_FOLDER = \'$PAG_HOME/repositories'|" $PAG_CFG_FILE
 GIT_FOLDER_INS=$(($( first_nline_patter GIT_FOLDER $PAG_CFG_FILE ) + 1))
 sed -i "${GIT_FOLDER_INS}i #DOCS_FOLDER = \'$PAG_HOME/repositories/docs\
 #TICKETS_FOLDER = \'$PAG_HOME/repositories/tickets\
-#REQUESTS_FOLDER = \'$PAG_HOME/repositories/requests"
+#REQUESTS_FOLDER = \'$PAG_HOME/repositories/requests" $PAG_CFG_FILE
 sed -i "s|REMOTE_GIT_FOLDER =.*|REMOTE_GIT_FOLDER = \'$PAG_HOME/remotes'|" $PAG_CFG_FILE
 sed -i "s|GITOLITE_CONFIG.*|GITOLITE_CONFIG = \'$PAG_HOME/.gitolite/conf/gitolite.conf'|" $PAG_CFG_FILE
 sed -i "s|GITOLITE_KEYDIR.*|GITOLITE_KEYDIR = \'$PAG_HOME/.gitolite/keydir'|" $PAG_CFG_FILE
 sed -i "s|GITOLITE_HOME.*|GITOLITE_HOME = \'$PAG_HOME'|" $PAG_CFG_FILE
 GIT_AUTH_INS=$(($( first_nline_patter GITOLITE_CONFIG $PAG_CFG_FILE ) + 1))
 sed -i "${GIT_AUTH_INS}i GIT_AUTH_BACKEND = 'gitolite3'" $PAG_CFG_FILE
-sed -i "s|GITOLITE_VERSION.*|GITOLITE_VERSION = 3|" $PAG_CFG_FILE
+sed -i "s|GITOLITE_VERSION|#GITOLITE_VERSION|" $PAG_CFG_FILE
 sed -i "s|os.path.join(|None|" $PAG_CFG_FILE
 #GL_BINDIR - GITOLITEv2 only
 sed -i "s|GL_BINDIR.*|#GL_BINDIR = None|" $PAG_CFG_FILE

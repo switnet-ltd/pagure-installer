@@ -24,21 +24,22 @@ apt -yqq install \
 				libffi-dev \
 				libgit2-dev \
 				libjpeg-dev \
-				virtualenv \
-				python3-pip \
-				python3-jinja2 \
 				python3-gdbm \
-				redis-server &>/dev/null
+				python3-jinja2 \
+				python3-pip \
+				python3-psycopg2 \
+				redis-server \
+				virtualenv &>/dev/null
 
-#apt -yqq install gitolite3
-# gitolite > 3.6.4 < 3.7.10
-#https://pagure.io/pagure/issue/3971
-apt -yqq install \
-				git \
-				libjson-perl
-wget https://ark.switnet.org/tmp/gitolite3/gitolite3_3.6.7-2_all.deb
 echo "gitolite3 gitolite3/adminkey string " | debconf-set-selections
-dpkg -i gitolite3_3.6.7-2_all.deb
+apt -yqq install gitolite3
+# gitolite > 3.6.4 < 3.7.10 ?
+# https://pagure.io/pagure/issue/3971
+#apt -yqq install \
+#				git \
+#				libjson-perl
+#wget https://ark.switnet.org/tmp/gitolite3/gitolite3_3.6.7-2_all.deb
+#dpkg -i gitolite3_3.6.7-2_all.deb
 PGSV=$(apt-cache madison postgresql | head -n1 | awk '{print $3}' | cut -d "+" -f1)
 PYT_V=$(apt-cache madison python3 | head -n1 | awk '{print $3}' | cut -d "." -f1,2)
 install_ifnot() {
@@ -64,9 +65,8 @@ grep -n $1 $2 | cut -d ":" -f1 | head -n1
 #--------------------------------------------------
 install_ifnot language-pack-en-base
 install_ifnot postgresql-$PGSV
-echo -e "\n---- PostgreSQL Settings  ----"
-sed -i "s|#listen_addresses = 'localhost'|listen_addresses = '*'|g" /etc/postgresql/$PGSV/main/postgresql.conf
-
+#echo -e "\n---- PostgreSQL Settings  ----"
+#sed -i "s|#listen_addresses = 'localhost'|listen_addresses = '*'|g" /etc/postgresql/$PGSV/main/postgresql.conf
 echo "
 Please select the suffix for this pagure instance.
 "
@@ -107,9 +107,6 @@ PAG_GIT_WRK=/lib/systemd/system/${PAG_USER}_gitolite_worker.service
 LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
-if [ $DIST = flidas ]; then
-DIST="xenial"
-fi
 if [ $DIST = xenial ]; then
 #Tmp fix for getting backported libraries
 wget \
@@ -119,6 +116,9 @@ dpkg -i libgit2*.deb
 apt install -fy
 apt -y autoremove
 rm -rf libgit2*.deb
+fi
+if [ $DIST = flidas ]; then
+DIST="xenial"
 fi
 set_ssl_apache() {
 SSL_UP=$(grep -n $1 $2 | cut -d ':' -f1)
@@ -172,13 +172,15 @@ chown $PAG_USER:$PAG_USER $PAG_HOME/log/
 cd $PAG_HOME
 sudo su $PAG_USER -c "git clone --depth 1 https://pagure.io/pagure.git $PAG_HOME_EXT/"
 sed -i "s|.*sys.path.insert.*|sys.path.insert(0, \'$PAG_HOME_EXT\')|" $HOOK_RUNR
+sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|g" $HOOK_RUNR
 #Apache copy
 echo -e "\n---- Installing python (pip) dependacies for pagure ----"
 cd $PAG_HOME_EXT
-sudo su $PAG_USER -c "virtualenv -p python3 ./venv"
+sudo su $PAG_USER -c "virtualenv --system-site-packages -p python3 ./venv"
 sudo su $PAG_USER -c "source ./venv/bin/activate"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install --upgrade pip"
-sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 idna==2.7 pygit2==0.26.4"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install pygit2==0.26.4"
+#sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install psycopg2 idna==2.7 pygit2==0.26.4"
 sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/{repositories,attachments,remotes,releases}"
@@ -502,8 +504,9 @@ sed -i "${WKD_LIN}i WorkingDirectory=$PAG_HOME_EXT" $PAG_GIT_WRK
 sed -i "s|/usr/bin/celery|$PAG_HOME_EXT/venv/bin/celery|" $PAG_GIT_WRK
 sed -i "s|=git|=$PAG_USER|" $PAG_GIT_WRK
 sed -i "s|=/etc/pagure/pagure.cfg|=$PAG_CFG_FILE|" $PAG_GIT_WRK
-sed -i "$(first_nline_patter Environment $PAG_GIT_WRK)i \
-Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PAG_HOME_EXT/venv/bin\"
+sed -i "/Environment/i \
+Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PAG_HOME_EXT/venv/bin\" \\
+\
 Environment=\"PYTHONPATH=$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages\"" $PAG_GIT_WRK
 systemctl enable $PAG_GIT_WRK
 systemctl start ${PAG_USER}_gitolite_worker.service

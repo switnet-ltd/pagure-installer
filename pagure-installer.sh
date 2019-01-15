@@ -311,13 +311,13 @@ elif [ $setdomain = yes ]; then
 		DOC_APP_URL=""
 		# Store data to $SETUP_DOMAIN variable
 		SETUP_DOMAIN=$(\
-		dialog --ok-label "Submit" \
-				--backtitle "Pagure Domain Setup" \
-				--title "Pagure - Domain Options" \
-				--form "Set system values for domain" \
-		10 90 0 \
-				"Pagure's domain:"		1 1	"$APP_URL" 	1 40 40 0 \
-				"Pagure's docs domain:" 2 1	"$DOC_APP_URL"  	2 40 40 0 \
+		dialog  --ok-label	"Submit" \
+                --backtitle	"Pagure Domain Setup" \
+                --title		"Pagure - Domain Options" \
+                --form		"Set system values for domain" \
+          10 90 0 \
+                "Pagure's domain:"		1 1	"$APP_URL" 	1 40 40 0 \
+                "Pagure's docs domain:" 2 1	"$DOC_APP_URL"  	2 40 40 0 \
 		  3>&1 1>&2 2>&3 3>&- \
 		)
 		# Extract variables
@@ -543,7 +543,6 @@ PAG_CI
 systemctl enable $PAG_CI_WRK
 systemctl start ${PAG_USER}_ci.service
 fi
-
 #Clean unused packages
 apt -y autoremove
 apt autoclean

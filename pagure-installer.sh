@@ -29,7 +29,7 @@ apt -yqq install \
 				python3-pip \
 				python3-psycopg2 \
 				redis-server \
-				virtualenv &>/dev/null
+				virtualenv
 
 echo "gitolite3 gitolite3/adminkey string " | debconf-set-selections
 apt -yqq install gitolite3
@@ -93,7 +93,16 @@ else
 	echo "Please enter a small sufix for this instance."
 fi
 done
-
+#Enable jenkins?
+while [[ $jenkins != yes && $jenkins != no ]]
+do
+read -p "Do you want to enable jenkins?: (yes or no)"$'\n' -r jenkins
+if [ $jenkins = no ]; then
+	echo "Jenkins won't be enable"
+elif [ $jenkins = "yes" ]; then
+	echo "Jenkins will be enabled"
+fi
+done
 PAG_USER="pag_$sufix"
 PAG_PDB="${PAG_USER}_db"
 SHUF=$(shuf -i 15-19 -n 1)
@@ -104,6 +113,7 @@ PAG_CFG_FILE="$PAG_HOME/pagure.cfg"
 HOOK_RUNR="$PAG_HOME_EXT/pagure/hooks/files/hookrunner"
 PAG_WRK_SRV=/lib/systemd/system/${PAG_USER}-worker.service
 PAG_GIT_WRK=/lib/systemd/system/${PAG_USER}_gitolite_worker.service
+PAG_CI_WRK=/lib/systemd/system/${PAG_USER}_ci.service
 LOG_FILE=$PAG_HOME/log/$PAG_USER-server.log
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
@@ -510,6 +520,29 @@ Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:
 Environment=\"PYTHONPATH=$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages\"" $PAG_GIT_WRK
 systemctl enable $PAG_GIT_WRK
 systemctl start ${PAG_USER}_gitolite_worker.service
+
+if [ $jenkins = 'yes' ];then
+echo "Setting up Jenkins"
+sudo su $PAG_USER -c "$PAG_HOME_EXT/venv/bin/pip3 install -r $PAG_HOME_EXT/requirements-ci.txt"
+cp $PAG_HOME_EXT/files/pagure_ci.service $PAG_CI_WRK
+SRV_GW=$(grep -n "\[Service\]" $PAG_CI_WRK  | cut -d ":" -f1)
+WKD_LIN=$((SRV_GW + 1))
+sed -i "${WKD_LIN}i WorkingDirectory=$PAG_HOME_EXT" $PAG_CI_WRK
+sed -i "s|/usr/bin/celery|$PAG_HOME_EXT/venv/bin/celery|" $PAG_CI_WRK
+sed -i "s|=git|=$PAG_USER|" $PAG_CI_WRK
+sed -i "s|=/etc/pagure/pagure.cfg|=$PAG_CFG_FILE|" $PAG_CI_WRK
+sed -i "/Environment/i \
+Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PAG_HOME_EXT/venv/bin\" \\
+\
+Environment=\"PYTHONPATH=$PAG_HOME_EXT/venv/lib/python${PYT_V}/site-packages\"" $PAG_CI_WRK
+cat  << PAG_CI >> $PAG_CFG_FILE
+
+PAGURE_CI_SERVICES = ['jenkins']
+PAG_CI
+
+systemctl enable $PAG_CI_WRK
+systemctl start ${PAG_USER}_ci.service
+fi
 
 #Clean unused packages
 apt -y autoremove

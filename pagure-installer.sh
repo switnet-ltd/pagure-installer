@@ -195,7 +195,7 @@ sed -e "s|#\!/usr/bin/env python|#\!${PY_VENV_DIR}/bin/python3|" -i \
 #ToDo - Check usage
 #sed -e "s|#!/usr/bin/env python|#!%{__python}|" -i \
 #    $PAG_HOME_EXT/pagure-milters/comment_email_milter.py \
-#    $PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
+
 
 SKEY=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 SMAIL=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
@@ -504,6 +504,8 @@ echo "Setting up Jenkins"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install -r $PAG_HOME_EXT/requirements-ci.txt"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install -r $PAG_HOME_EXT/requirements-ev.txt"
 #PAGURE-CI
+sed -e "s|#\!/usr/bin/env python|#\!${PY_VENV_DIR}/bin/python3|" -i \
+   $PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
 cp $PAG_HOME_EXT/files/pagure_ci.service $PAG_CI_WRK
 SRV_GW=$(grep -n "\[Service\]" $PAG_CI_WRK  | cut -d ":" -f1)
 WKD_LIN=$((SRV_GW + 1))

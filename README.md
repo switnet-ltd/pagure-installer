@@ -5,12 +5,9 @@ New support for ubuntu 18.04
 **Please note that this is a work in progress, not production ready**
 
 ## Features
-* Custom redis by instance by [mured.sh](https://github.com/switnet-ltd/mured)
-    * Custom redis db for celery
-* systemd pagure worker
-    * python3
-* systemd gitolite worker
-    * gitolite3
+* Custom redis for instance or celery by [mured.sh](https://github.com/switnet-ltd/mured)
+* systemd pagure worker - python3
+* systemd gitolite worker - gitolite3
 * jenkins integration (testing)
 * apache/letsencrypt self configuration
 

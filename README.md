@@ -20,10 +20,11 @@ New support for ubuntu 18.04
 * see [issues.](https://pagure.io/pagure-installer-trisquel/issues)
 
 ## Requirements
-* Trisquel 8
-* Ubuntu 18.04
-* Ubuntu 16.04
-    * requires backport libgit2 v0.26
+* Any of the following distros.
+    * Trisquel 8
+    * Ubuntu 18.04
+    * Ubuntu 16.04
+        * requires backport libgit2 v0.26
 * At least 1 domain configured, in order to use ssl along with letsencrypt
 
 

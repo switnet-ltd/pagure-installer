@@ -77,7 +77,7 @@ PAG_PDB="${PAG_USER}_db"
 SHUF=$(shuf -i 15-19 -n 1)
 PDB_PASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
 PAG_HOME="/home/$PAG_USER"
-PAG_HOME_EXT="$PAG_HOME/$PAG_USER-server"
+PAG_HOME_EXT="$PAG_HOME/${PAG_ID}-server"
 HOOK_RUNR="$PAG_HOME_EXT/pagure/hooks/files/hookrunner"
 PY_VENV_DIR="/home/$PAG_USER/.venv"
 PAG_USR_SHARE="/usr/share/pagure"
@@ -88,7 +88,7 @@ LOG_FILE="/var/log/pagure/pagure-server.log"
 PAG_WRK_SRV="/lib/systemd/system/${PAG_ID}_worker.service"
 PAG_GIT_WRK="/lib/systemd/system/${PAG_ID}_gitolite.service"
 PAG_CI_WRK="/lib/systemd/system/${PAG_ID}_ci.service"
-PAG_EV_WRK="/lib/systemd/system/${PAG_ID}_ve.service"
+PAG_EV_WRK="/lib/systemd/system/${PAG_ID}_ev.service"
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
 if [ $DIST = xenial ]; then
@@ -137,8 +137,8 @@ echo -e "\n---- Creating the Pagure PostgreSQL User  ----"
 cd /tmp
 sudo -u postgres psql <<DB
 CREATE DATABASE ${PAG_PDB};
-CREATE USER ${PAG_USER} WITH ENCRYPTED PASSWORD '${PDB_PASS}';
-GRANT ALL PRIVILEGES ON DATABASE ${PAG_PDB} TO ${PAG_USER};
+CREATE USER ${PAG_ID} WITH ENCRYPTED PASSWORD '${PDB_PASS}';
+GRANT ALL PRIVILEGES ON DATABASE ${PAG_PDB} TO ${PAG_ID};
 DB
 service postgresql restart
 
@@ -149,9 +149,8 @@ echo -e "\n---- Creating $PAG_USER system user ----"
 adduser --system --quiet --shell=/bin/bash --home=$PAG_HOME --gecos 'Pagure' --group $PAG_USER
 usermod -a -G www-data $PAG_USER
 echo -e "\n---- Creating log directory ----"
-mkdir $LOG_DIR
-mkdir $PAG_CFG_DIR
-chown $PAG_USER:$PAG_USER $LOG_DIR $PAG_CFG_DIR
+mkdir $LOG_DIR $PAG_CFG_DIR $PAG_USR_SHARE
+chown $PAG_USER:$PAG_USER $LOG_DIR $PAG_CFG_DIR $PAG_USR_SHARE
 
 #Retrieve the sources
 cd $PAG_HOME
@@ -179,7 +178,7 @@ sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.cfg.sample $PAG_CFG_FILE"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/alembic.ini $PAG_CFG_DIR/alembic.ini"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.wsgi $PAG_USR_SHARE/pagure.wsgi"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/doc_pagure.wsgi $PAG_USR_SHARE/doc_pagure.wsgi"
-PAG_USR_SHARE
+
 #ToDo - Check usage
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/aclchecker.py $PAG_HOME/aclchecker.py"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/keyhelper.py $PAG_HOME/keyhelper.py"
@@ -204,7 +203,7 @@ sed -i "s|.*SALT_EMAIL.*|SALT_EMAIL=\'$SMAIL\'|" $PAG_CFG_FILE
 # DATA BASE
 sed -i "s|DB_URL = 'sqlite|#DB_URL = 'sqlite|" $PAG_CFG_FILE
 sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|#DB_URL|DB_URL|" $PAG_CFG_FILE
-sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|user|$PAG_USER|" $PAG_CFG_FILE
+sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|user|$PAG_ID|" $PAG_CFG_FILE
 sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|pass|$PDB_PASS|" $PAG_CFG_FILE
 sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|host|localhost|" $PAG_CFG_FILE
 sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|db_name|$PAG_PDB|" $PAG_CFG_FILE
@@ -397,6 +396,7 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $AP2CONF
 			sed -i "s|#||" $AP2CONF
 			sed -i "s|SSLCertificate|#SSLCertificate|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|/usr/libexec/git-core/git-http-backend/|/usr/lib/git-core/git-http-backend/|" $AP2CONF
 			# Get ssl cert for domain using letsencrypt
 			service apache2 stop
 			letsencrypt certonly --standalone --renew-by-default --agree-tos --email $ADMIN_MAIL -d $APP_URL
@@ -405,6 +405,7 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			set_ssl_apache "$PAG_USR_SHARE/doc_pagure.wsgi" $AP2CONF $DOC_APP_URL
 			a2ensite $APP_URL.conf
 			#TuneUp site performance
+			sed -i "s|minutes=20|minutes=60|" $PAG_CFG_FILE
 			sed -i "s|.*SESSION_COOKIE_SECURE.*|SESSION_COOKIE_SECURE = True|" $PAG_CFG_FILE
 			sed -i "s|.*WEBHOOK.*|WEBHOOK = True|" $PAG_CFG_FILE
 			sed -i "s|.*EVENTSOURCE_SOURCE = None.*|EVENTSOURCE_SOURCE = \'https://${APP_URL}\'|" $PAG_CFG_FILE
@@ -438,6 +439,7 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $AP2CONF
 			sed -i "s|#||" $AP2CONF
 			sed -i "s|SSLCertificate|#SSLCertificate|" /etc/apache2/sites-available/$APP_URL.conf
+			sed -i "s|/usr/libexec/git-core/git-http-backend/|/usr/lib/git-core/git-http-backend/|" $AP2CONF
 			sed -i '/<VirtualHost/{:a;N;/\/VirtualHost>/!ba};'"/docs.${APP_URL}/"'d' $AP2CONF
 			  sed -i "s|.*WSGIDaemonProcess paguredocs|#WSGIDaemonProcess paguredocs|" $AP2CONF
 			  #sed -i "s|.*WSGIDaemonProcess paguredocs:*||" $AP2CONF #comment or delete?
@@ -457,7 +459,7 @@ fi
 
 cat  << CELERY >> $PAG_WRK_SRV
 [Unit]
-Description=$PAG_USER Server
+Description=Pagure Server
 Requires=postgresql.service
 After=postgresql.service redis.service
 Documentation=https://pagure.io/pagure
@@ -468,9 +470,9 @@ PermissionsStartOnly=true
 User=$PAG_USER
 Group=$PAG_USER
 WorkingDirectory=$PAG_HOME_EXT
-SyslogIdentifier=$PAG_USER
-PIDFile=/run/$PAG_USER/$PAG_USER.pid
-ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_USER
+SyslogIdentifier=$PAG_ID
+PIDFile=/run/$PAG_USER/$PAG_ID.pid
+ExecStartPre=/usr/bin/install -d -m755 -o $PAG_USER -g $PAG_USER /run/$PAG_ID
 ExecStart=$PY_VENV_DIR/bin/celery worker -A pagure.lib.tasks_services --loglevel=info
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PY_VENV_DIR/bin"
 Environment="PYTHONPATH=$PY_VENV_DIR/lib/python${PYT_V}/site-packages"
@@ -479,7 +481,7 @@ ExecStop=/bin/kill -s TERM \$MAINPID
 
 [Install]
 WantedBy=multi-user.target
-Alias=${PAG_USER}_worker.service
+Alias=${PAG_ID}_worker.service
 CELERY
 systemctl enable $PAG_WRK_SRV
 systemctl start ${PAG_ID}_worker.service
@@ -506,6 +508,7 @@ sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install -r $PAG_HOME_EXT/requirement
 #PAGURE-CI
 sed -e "s|#\!/usr/bin/env python|#\!${PY_VENV_DIR}/bin/python3|" -i \
    $PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
+chmod +x $PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
 cp $PAG_HOME_EXT/files/pagure_ci.service $PAG_CI_WRK
 SRV_GW=$(grep -n "\[Service\]" $PAG_CI_WRK  | cut -d ":" -f1)
 WKD_LIN=$((SRV_GW + 1))
@@ -519,8 +522,12 @@ Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:
 Environment=\"PYTHONPATH=$PY_VENV_DIR/lib/python${PYT_V}/site-packages\"" $PAG_CI_WRK
 systemctl enable $PAG_CI_WRK
 systemctl start ${PAG_ID}_ci.service
+cat  << PAG_CI >> $PAG_CFG_FILE
+
+PAGURE_CI_SERVICES = ['jenkins']
+PAG_CI
 #PAGURE-EV
-cp $PAG_HOME_EXT/pagure-ev/pagure_ev.service. $PAG_EV_WRK
+cp $PAG_HOME_EXT/pagure-ev/pagure_ev.service $PAG_EV_WRK
 SRV_GW=$(grep -n "\[Service\]" $PAG_EV_WRK  | cut -d ":" -f1)
 WKD_LIN=$((SRV_GW + 1))
 sed -i "${WKD_LIN}i WorkingDirectory=$PAG_HOME_EXT" $PAG_EV_WRK
@@ -533,11 +540,6 @@ Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:
 Environment=\"PYTHONPATH=$PY_VENV_DIR/lib/python${PYT_V}/site-packages\"" $PAG_EV_WRK
 systemctl enable $PAG_EV_WRK
 systemctl start ${PAG_ID}_ev.service
-cat  << PAG_CI >> $PAG_CFG_FILE
-
-PAGURE_CI_SERVICES = ['jenkins']
-PAG_CI
-
 fi
 #Clean unused packages
 apt -y autoremove

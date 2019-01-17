@@ -26,10 +26,8 @@ apt -yqq install \
 				libjpeg-dev \
 				python3-gdbm \
 				python3-jinja2 \
-				python3-pip \
 				python3-psycopg2 \
 				python3-venv \
-				virtualenv \
 				redis-server
 
 echo "gitolite3 gitolite3/adminkey string " | debconf-set-selections
@@ -160,7 +158,7 @@ sed -i "s|.*sys.path.insert.*|sys.path.insert(0, \'$PAG_HOME_EXT\')|" $HOOK_RUNR
 sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|g" $HOOK_RUNR
 echo -e "\n---- Installing python (pip) dependacies for pagure ----"
 sudo su $PAG_USER -c "mkdir $PY_VENV_DIR"
-sudo su $PAG_USER -c "virtualenv --system-site-packages -p python3 $PY_VENV_DIR"
+sudo su $PAG_USER -c "pyvenv --system-site-packages $PY_VENV_DIR"
 sudo su $PAG_USER -c "source $PY_VENV_DIR/bin/activate"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install --upgrade pip"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install asyncio pygit2==0.26.4"

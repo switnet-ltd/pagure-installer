@@ -163,7 +163,7 @@ sudo su $PAG_USER -c "mkdir $PY_VENV_DIR"
 sudo su $PAG_USER -c "virtualenv --system-site-packages -p python3 $PY_VENV_DIR"
 sudo su $PAG_USER -c "source $PY_VENV_DIR/bin/activate"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install --upgrade pip"
-sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install pygit2==0.26.4"
+sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install asyncio pygit2==0.26.4"
 #sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install psycopg2 idna==2.7 pygit2==0.26.4"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
@@ -379,7 +379,7 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			echo "Let's get to it ..."
 			install_ifnot apache2
 			install_ifnot libapache2-mod-wsgi-py3
-			a2enmod ssl headers wsgi
+			a2enmod ssl headers wsgi cgi
 			update_certbot
 			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
 			AP2CONF="/etc/apache2/sites-available/$APP_URL.conf"
@@ -424,7 +424,7 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			echo "Let's get to it ..."
 			install_ifnot apache2
 			install_ifnot libapache2-mod-wsgi-py3
-			a2enmod ssl headers wsgi
+			a2enmod ssl headers wsgi cgi
 			update_certbot
 			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
 			AP2CONF="/etc/apache2/sites-available/$APP_URL.conf"
@@ -507,7 +507,10 @@ sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install -r $PAG_HOME_EXT/requirement
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install -r $PAG_HOME_EXT/requirements-ev.txt"
 #PAGURE-CI
 sed -e "s|#\!/usr/bin/env python|#\!${PY_VENV_DIR}/bin/python3|" -i \
-   $PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
+$PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
+sed -i "/import os/a import sys\\
+\
+sys.path.insert(0, \'$PAG_HOME_EXT/\')" $PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
 chmod +x $PAG_HOME_EXT/pagure-ev/pagure_stream_server.py
 cp $PAG_HOME_EXT/files/pagure_ci.service $PAG_CI_WRK
 SRV_GW=$(grep -n "\[Service\]" $PAG_CI_WRK  | cut -d ":" -f1)

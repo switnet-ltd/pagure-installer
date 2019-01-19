@@ -162,9 +162,9 @@ sudo su $PAG_USER -c "pyvenv --system-site-packages $PY_VENV_DIR"
 sudo su $PAG_USER -c "source $PY_VENV_DIR/bin/activate"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install --upgrade pip"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install asyncio pygit2==0.26.4"
-#sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install psycopg2 idna==2.7 pygit2==0.26.4"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
+
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/{repositories,attachments,remotes,releases}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"

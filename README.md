@@ -1,20 +1,15 @@
 # Pagure Installer - Celery - Beta
-Bash installer for Pagure on *buntu LTS 16.04 based systems such as trisquel 8.
-New support for ubuntu 18.04
+Bash installer for Pagure on Ubuntu LTS based systems such as Trisquel 8.
 
 **Please note that this is a work in progress, not production ready**
 
 ## Features
+* Installation of pagure latest stable release
 * Custom redis for instance or celery by [mured.sh](https://github.com/switnet-ltd/mured)
-* systemd pagure worker - python3
-* systemd gitolite worker - gitolite3
-* jenkins integration (testing)
-* apache/letsencrypt self configuration
-
-
-## To Be Determined
-* set/fix workers configuration
-* see [issues.](https://pagure.io/pagure-installer-trisquel/issues)
+* Systemd pagure worker - python3
+* Systemd gitolite worker - gitolite3
+* Jenkins integration (testing)
+* Apache/letsencrypt self configuration
 
 ## Requirements
 * Any of the following distros.
@@ -24,5 +19,8 @@ New support for ubuntu 18.04
         * requires backport libgit2 v0.26
 * At least 1 domain configured, in order to use ssl along with letsencrypt
 
+## Feedback
+* improve workers configuration
+* see [issues.](https://pagure.io/pagure-installer-trisquel/issues)
 
 SwITNet Ltd © - 2018, https://switnet.net/

@@ -24,6 +24,7 @@ apt -yqq install \
 				libffi-dev \
 				libgit2-dev \
 				libjpeg-dev \
+				python3-dev \
 				python3-gdbm \
 				python3-jinja2 \
 				python3-psycopg2 \
@@ -89,6 +90,8 @@ PAG_CI_WRK="/lib/systemd/system/${PAG_ID}_ci.service"
 PAG_EV_WRK="/lib/systemd/system/${PAG_ID}_ev.service"
 ADDRESS=$(hostname -I | cut -d ' ' -f 1)
 CERTBOT_REPO=$(apt-cache policy | grep http | grep certbot | head -n 1 | awk '{print $2}' | cut -d "/" -f 5)
+PAG_CHECKSUM="https://releases.pagure.org/pagure/CHECKSUMS"
+PAG_STABLE=$(curl -s $PAG_CHECKSUM | grep -v SHA512 | grep -Po '(?<=pagure-)[^;]+' | rev | grep -Po '(?<=rat.)[^;]+' | rev | tail -n1)
 if [ $DIST = xenial ]; then
 #Tmp fix for getting backported libraries
 wget \
@@ -152,7 +155,11 @@ chown $PAG_USER:$PAG_USER $LOG_DIR $PAG_CFG_DIR $PAG_USR_SHARE
 
 #Retrieve the sources
 cd $PAG_HOME
-sudo su $PAG_USER -c "git clone --depth 1 https://pagure.io/pagure.git $PAG_HOME_EXT/"
+sudo su $PAG_USER -c "git clone https://pagure.io/pagure.git $PAG_HOME_EXT ; \
+					  cd $PAG_HOME_EXT ; \
+					  git checkout -b ${PAG_STABLE}_stable ${PAG_STABLE} ; \
+					  git branch -D master ; git checkout -b master ; \
+					  git log | head -n6"
 sed -i "s|.*sys.path.insert.*|sys.path.insert(0, \'$PAG_HOME_EXT\')|" $HOOK_RUNR
 #Keep for verbose config.
 sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|g" $HOOK_RUNR
@@ -308,9 +315,7 @@ done
 
 #REDIS
 #Using mured.sh - https://github.com/switnet-ltd/mured
-echo "Redis sufix:"
-read RED_SUFIX
-export RED_SUFIX
+export RED_SUFIX=pag
 export RED_CON=1
 bash <(curl -s https://raw.githubusercontent.com/switnet-ltd/mured/master/mured.sh)
 #Find port from sufix
@@ -379,6 +384,7 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			install_ifnot libapache2-mod-wsgi-py3
 			a2enmod ssl headers wsgi cgi
 			update_certbot
+			install_ifnot python3-certbot-apache
 			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
 			AP2CONF="/etc/apache2/sites-available/$APP_URL.conf"
 			sed -i "s|run/wsgi|/var/run/wsgi|" $AP2CONF
@@ -424,6 +430,7 @@ echo -e "\nDo you want to setup apache config? (yes|no)"
 			install_ifnot libapache2-mod-wsgi-py3
 			a2enmod ssl headers wsgi cgi
 			update_certbot
+			install_ifnot python3-certbot-apache
 			cp $PAG_HOME_EXT/files/pagure.conf /etc/apache2/sites-available/$APP_URL.conf
 			AP2CONF="/etc/apache2/sites-available/$APP_URL.conf"
 			sed -i "s|run/wsgi|/var/run/wsgi|" $AP2CONF

@@ -362,6 +362,11 @@ sed -i "s|.*SSH_KEYS =.*|SSH_KEYS = \{\'RSA\':\\
 \}\\
 \
 \}|" $PAG_CFG_FILE
+#About contact email
+sed -i "/ADMIN_GROUP/a \\
+\\
+#Administrator email which is displayed on the \"about\" page\\
+ADMIN_EMAIL = \'\'" $PAG_CFG_FILE
 #Create the inital database scheme
 sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_CFG_DIR/alembic.ini
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/python3 $PAG_HOME_EXT/createdb.py -i $PAG_CFG_DIR/alembic.ini -c $PAG_CFG_FILE"

@@ -142,7 +142,6 @@ CREATE USER ${PAG_ID} WITH ENCRYPTED PASSWORD '${PDB_PASS}';
 GRANT ALL PRIVILEGES ON DATABASE ${PAG_PDB} TO ${PAG_ID};
 DB
 service postgresql restart
-
 #--------------------------------------------------
 # System Settings
 #--------------------------------------------------
@@ -152,7 +151,7 @@ usermod -a -G www-data $PAG_USER
 echo -e "\n---- Creating log directory ----"
 mkdir $LOG_DIR $PAG_CFG_DIR $PAG_USR_SHARE
 chown $PAG_USER:$PAG_USER $LOG_DIR $PAG_CFG_DIR $PAG_USR_SHARE
-
+#
 #Retrieve the sources
 cd $PAG_HOME
 sudo su $PAG_USER -c "git clone https://pagure.io/pagure.git $PAG_HOME_EXT ; \
@@ -171,7 +170,6 @@ sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install --upgrade pip"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install asyncio pygit2==0.26.4"
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/pip3 install -r $PAG_HOME_EXT/requirements.txt"
 #Create the folder that will receive the projects, forks, docs, requests and tickets' git repo
-
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/.gitolite/{conf,keydir,logs}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/{repositories,attachments,remotes,releases}"
 sudo su $PAG_USER -c "mkdir -p $PAG_HOME/repositories/{docs,forks,requests,tickets}"
@@ -183,7 +181,6 @@ sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.cfg.sample $PAG_CFG_FILE"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/alembic.ini $PAG_CFG_DIR/alembic.ini"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/pagure.wsgi $PAG_USR_SHARE/pagure.wsgi"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/doc_pagure.wsgi $PAG_USR_SHARE/doc_pagure.wsgi"
-
 #ToDo - Check usage
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/aclchecker.py $PAG_HOME/aclchecker.py"
 sudo su $PAG_USER -c "cp $PAG_HOME_EXT/files/keyhelper.py $PAG_HOME/keyhelper.py"
@@ -199,8 +196,7 @@ sed -e "s|#\!/usr/bin/env python|#\!${PY_VENV_DIR}/bin/python3|" -i \
 #ToDo - Check usage
 #sed -e "s|#!/usr/bin/env python|#!%{__python}|" -i \
 #    $PAG_HOME_EXT/pagure-milters/comment_email_milter.py \
-
-
+#
 SKEY=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 SMAIL=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
 sed -i "s|.*SECRET_KEY.*|SECRET_KEY=\'$SKEY\'|" $PAG_CFG_FILE
@@ -212,7 +208,7 @@ sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|user|$PAG_ID|" $PAG_
 sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|pass|$PDB_PASS|" $PAG_CFG_FILE
 sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|host|localhost|" $PAG_CFG_FILE
 sed -i "$(first_nline_patter "postgres://" $PAG_CFG_FILE) s|db_name|$PAG_PDB|" $PAG_CFG_FILE
-
+#
 #Enable and setup email
 echo -e "\nDo you want to enable and configure email sending? (yes|no):"
 while [[ $EMAIL_SET_ANS != yes && $EMAIL_SET_ANS != no ]]
@@ -261,7 +257,6 @@ elif [ $EMAIL_SET_ANS = yes ]; then
 		SMTP_SSL=$(echo "$SETUP_EMAIL" | sed -n 7p)
 		SMTP_USR=$(echo "$SETUP_EMAIL" | sed -n 8p)
 		SMTP_PSWD=$(echo "$SETUP_EMAIL" | sed -n 9p)
-
 		# Set them in place
 		check_empty_sed "PAGURE_ADMIN_USERS" "$PAG_CFG_FILE" "\[\]" "\[ \'$ADMIN_MAIL\' \]"
 		check_empty_sed "EMAIL_ERROR" "$PAG_CFG_FILE" "root@localhost" "$EMAIL_SYS_ERR"
@@ -276,7 +271,7 @@ else
 echo "There is only a yes | no response."
 fi
 done
-
+#
 echo -e "\nDo you want to configure your domain?* (yes|no):"
 echo "*(Required for SSL setup)"
 while [[ $setdomain != yes && $setdomain != no ]]
@@ -312,7 +307,6 @@ else
 	echo "There is only a yes | no response."
 fi
 done
-
 #REDIS
 #Using mured.sh - https://github.com/switnet-ltd/mured
 export RED_SUFIX=pag
@@ -327,7 +321,6 @@ BRK_INS=$((RED_DBL + 1))
 BRK_DBN=$((RED_DBN + 1))
 sed -i "${BRK_INS}i BROKER_URL = \'redis://localhost:$REDIS_PORT/$BRK_DBN\'" $PAG_CFG_FILE
 usermod -aG redis $PAG_USER
-
 #GITOLITE
 ##pagure.cfg
 #Set fixed python path
@@ -356,11 +349,22 @@ sed -i "s|/path/to/git/repositories|$PAG_HOME/repositories|" $PAG_HOME/.gitolite
 #Set server ssh key.
 sudo su $PAG_USER -c "ssh-keygen -t rsa -b 4096"
 sudo su $PAG_USER -c "touch $PAG_HOME/.ssh/authorized_keys"
-
+#Set ssh info on server
+SSH_FINGERP="$(ssh-keygen -lf /home/$PAG_USER/.ssh/id_rsa.pub -E md5 | awk '{print$1,$2,$4}')"
+SSH_PUB="$(cat /home/$PAG_USER/.ssh/id_rsa.pub| awk '{print$1,$2}')"
+sed -i "s|.*SSH_KEYS =.*|SSH_KEYS = \{\'RSA\':\\
+\
+\{\\
+\'fingerprint\': \'${SSH_FINGERP}\',\\
+\
+\'pubkey\': \'${SSH_PUB}\',\\
+\
+\}\\
+\
+\}|" $PAG_CFG_FILE
 #Create the inital database scheme
 sed -i "s|.*script_location.*|script_location = $PAG_HOME_EXT/alembic|" $PAG_CFG_DIR/alembic.ini
 sudo su $PAG_USER -c "$PY_VENV_DIR/bin/python3 $PAG_HOME_EXT/createdb.py -i $PAG_CFG_DIR/alembic.ini -c $PAG_CFG_FILE"
-
 ## Setup WSGI
 sed -i "s|/etc/pagure/pagure.cfg|$PAG_CFG_FILE|" $PAG_USR_SHARE/pagure.wsgi
 sed -i "s|/path/to/pagure/|$PAG_HOME_EXT/|" $PAG_USR_SHARE/pagure.wsgi
